@@ -1,0 +1,1402 @@
+---
+title: "Processing and visualising data"
+author: "Patrice Pottier"
+date: '2025/01/17'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Load relevant packages
+```{r}
+pacman::p_load(tidyverse,
+               ggstream,
+               flextable,
+               bibliometrix,
+               bib2df,
+               circlize,
+               patchwork)
+set.seed(123)
+```
+
+# **Import data**
+```{r}
+# Import survey data
+raw_data <- read_csv("Data/extracted_data_cons_phys_life_stages.csv")
+
+# Remove spaces in column names
+colnames(raw_data) <- gsub(" ", "_", colnames(raw_data))
+```
+
+# **Data cleaning**
+
+```{r}
+# Fix some typos with swapped titles or missing publication years
+data <- raw_data
+data$Short_reference[data$Short_reference == "Illing_et_al_2029"] <- "Illing_et_al_2020"
+data$Short_reference[data$Short_reference == "Shartau_et_al_2002"] <- "Shartau_et_al_2016"
+data$Short_reference[data$Short_reference == "Abdelqader_and_Al-Fataftah"] <- "Abdelqader_and_Al-Fataftah_2014"
+data$Short_reference[data$Short_reference == "Wiedenova_et_al_"] <- "Wiedenova_et_al_2018"
+data$Short_reference[data$Short_reference == "Radugina_and_Grigoryan"] <- "Radugina_and_Grigoryan_2018"
+
+data$Short_reference[data$Short_reference == "Acute thermal stress and endotoxin exposure modulate metabolism and immunity in marine mussels (Perna canaliculus)"] <- "Muznebin_et_al_2022"
+data$Title[data$Short_reference == "Muznebin_et_al_2022"] <- "Acute thermal stress and endotoxin exposure modulate metabolism and immunity in marine mussels (Perna canaliculus)"
+data$Short_reference[data$Short_reference == "Heat stress is associated with disruption of ion balance in the migratory locust, Locusta migratoria"] <- "O'Sullivan_et_al_2017"
+data$Title[data$Short_reference == "O'Sullivan_et_al_2017"] <- "Heat stress is associated with disruption of ion balance in the migratory locust, Locusta migratoria"
+
+data <- data %>% filter(Title != "Physiological correlates of symbiont migration during bleaching of two octocoral species")
+data$Title[data$Title == "Physiological correlates of symbiont migration during bleaching of two octocoral species  Katharina"] <- "Physiological correlates of symbiont migration during bleaching of two octocoral species"
+  
+# Remove duplicates 
+data %>% group_by(Title) %>% summarise(n=n()) %>% filter(n>1) # Check if any title is duplicated
+data <- data %>% distinct(Title, .keep_all = TRUE) # Remove duplicate
+
+# Create a column for publication year
+data <- data %>%
+  mutate(Publication_year = as.integer(str_extract(Short_reference, "\\d{4}")))
+
+# Rename columns
+data <- rename(data, 
+               Life_stage_exposed = Life_stage_exposed_to_the_stressor,
+               Life_stage_tested = Life_stage_of_the_animals_when_traits_were_measured)
+
+# View Trait categories
+#View(data.frame(table(raw_data$Trait_category)))
+
+# Delete and rename some observations
+data <- data %>% 
+  filter(Trait_category != "Biomechanics",
+         Trait_category != "micro RNA expression") %>% 
+  mutate(Trait_category = case_when(
+      Trait_category == "Resting membrane potential" ~ "Energetics and metabolism",
+      Trait_category == "DNA damage" ~ "Immune function and stress physiology",
+      Trait_category == "Energetics and metabolism, Haematology" ~ "Energetics and metabolism, Cardiovascular physiology",
+      Trait_category == "Energetics and metabolism, Osmoregulation, FLIGHT ACTIVITY, ALLOMETRIC MEASURES, Cuticular hydrocarbons,AKH-related gene expression variations" ~ "Energetics and metabolism, Osmoregulation",
+      Trait_category == "Environmental tolerance and preference, Cardiovascular physiology, Respiratory physiology" ~ "Environmental tolerance and preference, Cardiovascular physiology, Energetics and metabolism",
+      Trait_category == "Environmental tolerance and preference, Clearance (feeding) rate" ~ "Environmental tolerance and preference",
+      Trait_category == "Environmental tolerance and preference, Development, Acclimation" ~ "Environmental tolerance and preference, Development",
+      Trait_category == "Environmental tolerance and preference, Development, Behavior" ~ "Environmental tolerance and preference, Development",
+      Trait_category == "Environmental tolerance and preference, Development, Embryo physiology" ~ "Environmental tolerance and preference, Development",
+      Trait_category == "Environmental tolerance and preference, Development, thyroid function" ~ "Environmental tolerance and preference, Development, Other",
+      Trait_category == "Environmental tolerance and preference, Energetics and metabolism, Behavior" ~ "Environmental tolerance and preference, Energetics and metabolism",
+      Trait_category == "Environmental tolerance and preference, Energetics and metabolism, Behavior and physiology" ~ "Environmental tolerance and preference, Energetics and metabolism",
+      Trait_category == "Environmental tolerance and preference, Energetics and metabolism, condition factor, relative intestinal mass, and hepatosomatic index" ~ "Environmental tolerance and preference, Energetics and metabolism, Development",
+      Trait_category == "Environmental tolerance and preference, Energetics and metabolism, Immune function and stress physiology, Behavioral responses" ~ "Environmental tolerance and preference, Energetics and metabolism, Immune function and stress physiology",
+      Trait_category == "Environmental tolerance and preference, Energetics and metabolism, Immune function and stress physiology, Development, Behavior" ~ "Environmental tolerance and preference, Energetics and metabolism, Immune function and stress physiology, Development",
+      Trait_category == "Environmental tolerance and preference, Energetics and metabolism, Morphology and Behavior" ~ "Environmental tolerance and preference, Energetics and metabolism",
+      Trait_category == "Environmental tolerance and preference, Energetics and metabolism, Osmoregulation, Behavior" ~ "Environmental tolerance and preference, Energetics and metabolism, Osmoregulation",
+      Trait_category == "Environmental tolerance and preference, Energetics and metabolism, Performance" ~ "Environmental tolerance and preference, Energetics and metabolism",
+      Trait_category == "Environmental tolerance and preference, gut microbiome" ~ "Environmental tolerance and preference, Other",
+      Trait_category == "Environmental tolerance and preference, Immune function and stress physiology, thyroid hormones" ~ "Environmental tolerance and preference, Immune function and stress physiology, Other",
+      Trait_category == "Environmental tolerance and preference, Neurophysiology" ~ "Environmental tolerance and preference, Other",
+      Trait_category == "Environmental tolerance and preference, Performance" ~ "Environmental tolerance and preference",
+      Trait_category == "Environmental tolerance and preference, photochemical parameters/symbiont density" ~ "Environmental tolerance and preference, Other",
+      Trait_category == "Environmental tolerance and preference, Physiology and behavior" ~ "Environmental tolerance and preference",
+      Trait_category == "Environmental tolerance and preference, Reproduction, lifespan" ~ "Environmental tolerance and preference, Reproduction, Development",
+      Trait_category == "gene expression of 'energy regulation' pathways" ~ "Energetics and metabolism",
+      Trait_category == "Immune function and stress physiology, Development, gene expression" ~ "Immune function and stress physiology, Development",
+      Trait_category == "mitochondrial membrane potential; proton leak; ratio of moles of ADP consumed per mole of oxygen" ~ "Energetics and metabolism",
+      Trait_category == "Osmoregulation, Hydroregulation" ~ "Osmoregulation",    
+      Trait_category == "Osmoregulation, Immune function and stress physiology, behavior" ~ "Osmoregulation, Immune function and stress physiology",    
+      Trait_category == "Osmoregulation, Performance" ~ "Osmoregulation",  
+      Trait_category == "Osmoregulation, Sensory physiology" ~ "Osmoregulation, Other",  
+      Trait_category == "Resting membrane potential" ~ "Environmental tolerance and preference",  
+      Trait_category == "Reproduction, Development, longevity" ~ "Reproduction, Development, Environmental tolerance and preference",
+      Trait_category == "Reproduction, Development, mortality" ~ "Reproduction, Development, Environmental tolerance and preference",
+      Trait_category == "Energetics and metabolism, Immune function and stress physiology, membrane potential" ~ "Energetics and metabolism, Immune function and stress physiology",
+      Trait_category == "Environmental tolerance and preference, membrane potential" ~ "Environmental tolerance and preference",
+      Trait_category == "Osmoregulation, membrane potential" ~ "Osmoregulation, Energetics and metabolism",
+      Trait_category == "Energetics and metabolism, membrane potential" ~ "Energetics and metabolism", 
+      TRUE ~ Trait_category
+    ))
+
+# Check unique categories
+ data %>%
+  pull(Trait_category) %>%       
+  strsplit(", ") %>%                    
+  unlist() %>%                           
+  unique() # All good
+
+# View stressor categories
+#View(data.frame(table(data$Climate_change_stressor)))
+
+# Delete and rename some observations
+data <- data %>% 
+  filter(Climate_change_stressor != "pressure exposure",
+         Climate_change_stressor != "Interaction with non-climatic stressor") %>% 
+  mutate(Climate_change_stressor = case_when(
+      Climate_change_stressor == "Acidification" ~ "pH",
+      Climate_change_stressor == "altitude" ~ "O₂/CO₂",
+      Climate_change_stressor == "Calcium content" ~ "pH",
+      Climate_change_stressor == "CO2" ~ "O₂/CO₂", 
+      Climate_change_stressor == "diet" ~ "Other", 
+      Climate_change_stressor == "Diet" ~ "Other",
+      Climate_change_stressor == "diet and water" ~ "Other, Humidity/Water availability", 
+      Climate_change_stressor == "Humidity" ~ "Humidity/Water availability",
+      Climate_change_stressor == "Hypercapnia" ~ "O₂/CO₂", 
+      Climate_change_stressor == "Interaction with non-climatic stressor, water restriction" ~ "Interaction with non-climatic stressor, Humidity/Water availability",
+      Climate_change_stressor == "osmolality" ~ "Salinity", 
+      Climate_change_stressor == "Oxygen, acidification" ~ "O₂/CO₂, pH",
+      Climate_change_stressor == "Oxygen, Acidification" ~ "O₂/CO₂, pH",
+      Climate_change_stressor == "Oxygen, altitude" ~ "O₂/CO₂",
+      Climate_change_stressor == "Oxygen, carbon dioxide" ~ "O₂/CO₂",
+      Climate_change_stressor == "Oxygen" ~ "O₂/CO₂",
+      Climate_change_stressor == "Oxygen, CO2" ~ "O₂/CO₂",
+      Climate_change_stressor == "Oxygen, Humidity" ~ "O₂/CO₂, Humidity/Water availability",
+      Climate_change_stressor == "Oxygen, pH, Interaction with non-climatic stressor" ~ "O₂/CO₂, Interaction with non-climatic stressor, pH",
+      Climate_change_stressor == "Oxygen, hypercapnia" ~ "O₂/CO₂",
+      Climate_change_stressor == "Oxygen, Interaction with non-climatic stressor" ~ "O₂/CO₂, Interaction with non-climatic stressor",
+      Climate_change_stressor == "Oxygen, light" ~ "O₂/CO₂, Interaction with non-climatic stressor",
+      Climate_change_stressor == "Oxygen, pH" ~ "O₂/CO₂, pH",
+      Climate_change_stressor == "Oxygen, pH, acidification" ~ "O₂/CO₂, pH",
+      Climate_change_stressor == "Oxygen, pH, carbon dioxide" ~ "O₂/CO₂, pH",
+      Climate_change_stressor == "Oxygen, Salinity" ~ "O₂/CO₂, Salinity",
+      Climate_change_stressor == "pH, acidification" ~ "pH",
+      Climate_change_stressor == "pH, Acidification" ~ "pH",
+      Climate_change_stressor == "pH, Aluminum toxicity" ~ "pH, Interaction with non-climatic stressor",
+      Climate_change_stressor == "pH, Hypercapnia" ~ "O₂/CO₂, pH",
+      Climate_change_stressor == "pH, Salinity, CO2" ~ "O₂/CO₂, pH, Salinity",
+      Climate_change_stressor == "pH, salt and ammonia" ~ "pH, Salinity, Interaction with non-climatic stressor",
+      Climate_change_stressor == "precipitation: rainy vs dry" ~ "Humidity/Water availability",
+      Climate_change_stressor == "Salinity, dessication" ~ "Salinity, Humidity/Water availability",
+      Climate_change_stressor == "Temperature, acidification" ~ "Temperature, pH",
+      Climate_change_stressor == "Temperature, Acidification" ~ "Temperature, pH",
+      Climate_change_stressor == "Temperature, Artificial light" ~ "Temperature, Interaction with non-climatic stressor",
+      Climate_change_stressor == "Temperature, Carbon Dioxide" ~ "Temperature, O₂/CO₂",
+      Climate_change_stressor == "Temperature, CO2" ~ "Temperature, O₂/CO₂",
+      Climate_change_stressor == "Temperature, dehydration" ~ "Temperature, Humidity/Water availability",
+      Climate_change_stressor == "Temperature, desiccation" ~ "Temperature, Humidity/Water availability",
+      Climate_change_stressor == "Temperature, Diet" ~ "Temperature, Other",
+      Climate_change_stressor == "Temperature, food restriction" ~ "Temperature, Other",
+      Climate_change_stressor == "Temperature, food scarcity" ~ "Temperature, Other",
+      Climate_change_stressor == "Temperature, Humidity" ~ "Temperature, Humidity/Water availability",
+      Climate_change_stressor == "Temperature, limited food availability" ~ "Temperature, Other",
+      Climate_change_stressor == "Temperature, low water volume" ~ "Temperature, Humidity/Water availability",
+      Climate_change_stressor == "Temperature, Oxygen" ~ "Temperature, O₂/CO₂",
+      Climate_change_stressor == "Temperature, Oxygen, CO2" ~ "Temperature, O₂/CO₂",
+      Climate_change_stressor == "Temperature, Oxygen, Humidity" ~ "Temperature, Humidity/Water availability, O₂/CO₂",
+      Climate_change_stressor == "Temperature, Oxygen, hypercapnia" ~ "Temperature, O₂/CO₂",
+      Climate_change_stressor == "Temperature, Oxygen, Hypercapnia" ~ "Temperature, O₂/CO₂",
+      Climate_change_stressor == "Temperature, Oxygen, Interaction with non-climatic stressor" ~ "Temperature, O₂/CO₂, Interaction with non-climatic stressor",
+      Climate_change_stressor == "Temperature, Oxygen, PCO2" ~ "Temperature, O₂/CO₂",
+      Climate_change_stressor == "Temperature, Oxygen, pH" ~ "Temperature, pH, O₂/CO₂",
+      Climate_change_stressor == "Temperature, Oxygen, Salinity" ~ "Temperature, Salinity, O₂/CO₂",
+      Climate_change_stressor == "Temperature, pH, acidification" ~ "Temperature, pH",
+      Climate_change_stressor == "Temperature, photoperiod" ~ "Temperature, Interaction with non-climatic stressor",
+      Climate_change_stressor == "Temperature, UV" ~ "Temperature, Other", 
+      Climate_change_stressor == "Temperature, UV-B radiation" ~ "Temperature, Other", 
+      Climate_change_stressor == "Temperature, UV radiation" ~ "Temperature, Other", 
+      Climate_change_stressor == "Temperature, water restriction" ~ "Temperature, Humidity/Water availability",
+      Climate_change_stressor == "Temperature, wave action" ~ "Temperature, Interaction with non-climatic stressor",
+      Climate_change_stressor == "Ultraviolet B radiation (UV-B)" ~ "Other", 
+      Climate_change_stressor == "UV-B" ~ "Other", 
+      Climate_change_stressor == "UV" ~ "Other", 
+      Climate_change_stressor == "UV-B exposure" ~ "Other", 
+      Climate_change_stressor == "UV radiation" ~ "Other", 
+      Climate_change_stressor == "water" ~ "Humidity/Water availability",
+      Climate_change_stressor == "Water availability" ~ "Humidity/Water availability",
+      Climate_change_stressor == "water deprivation" ~ "Humidity/Water availability",
+      Climate_change_stressor == "water restriction" ~ "Humidity/Water availability",
+      TRUE ~ Climate_change_stressor
+    ))
+# Diet and UV radiation were pooled together as "Other" because rare
+
+# Check unique categories
+ data %>%
+  pull(Climate_change_stressor) %>%       
+  strsplit(", ") %>%                    
+  unlist() %>%                           
+  unique() # All good
+ 
+ 
+#######################
+ 
+# View life stage exposed categories
+#View(data.frame(table(data$Life_stage_exposed)))
+
+# Delete and rename some observations. Each of these were checked manually and resolved.
+data <- data %>% 
+  mutate(Life_stage_exposed = case_when(
+      Life_stage_exposed == "adults" ~ "Adults",
+      Life_stage_exposed == "Adults, Unclear" ~ "Unclear",
+      Life_stage_exposed == "Embryos, gametes and embryos." ~ "Embryos",
+      Life_stage_exposed == "Embryos, Larvae or juveniles, Adults, 7 generations exposed to 2 different temps" ~ "Mix (before and after hatching)",
+      Life_stage_exposed == "Embryos, Larvae or juveniles, Adults, Mix (before and after hatching)" ~ "Mix (before and after hatching)",
+      Life_stage_exposed == "Embryos, maybe also juveniles. It's unclear when the temperature treatment ends." ~ "Embryos, Adults",
+      Life_stage_exposed == "exposure was at a single time point, but performed on a mixture of juveniles and adults for the one experiment" ~ "Mix (strictly after hatching)",
+      Life_stage_exposed == "it is one exposure, occurring at a single time point, but some of the individuals were adult and some were juvenile." ~ "Mix (strictly after hatching)",
+      Life_stage_exposed == "Larvae or juveniles, adults" ~ "Larvae or juveniles, Adults",
+      Life_stage_exposed == "Larvae or juveniles, Age-0 (could be juveniles or adults)" ~ "Larvae or juveniles", # all species are not sexually mature at this age
+      Life_stage_exposed == "Larvae or juveniles, exposure was performed on larvae only but for 13 consecutive generations" ~ "Larvae or juveniles",
+      Life_stage_exposed == "Subadult" ~ "Larvae or juveniles", # Sub adults can be considered juveniles
+      Life_stage_exposed == "Unclear, 4 month old male rats" ~ "Adults", # They are sexually mature at this age
+      Life_stage_exposed == "Unclear, Either juveniles, adults, or a mixture of both stages. Can't easily determine it." ~ "Unclear",
+      Life_stage_exposed == "Unclear, I can infer its post-hatching, but cannot say with certainty whether they're juveniles or adults." ~ "Unclear",
+      Life_stage_exposed == "Unclear, I think it is either juvenile or adult but they don't specify" ~ "Unclear",
+      Life_stage_exposed == "Unclear, probably juveniles or adults" ~ "Unclear",
+      Life_stage_exposed == "Adults, Colonial organisms. Included gravid reproductive zooids but also incomplete zooids" ~ "Mix (strictly after hatching)",
+      TRUE ~ Life_stage_exposed
+    ))
+
+ data %>%
+  pull(Life_stage_exposed) %>%       
+  strsplit(", ") %>%                    
+  unlist() %>%                           
+  unique() # All good. 
+ 
+#######################
+ 
+# View life stage tested categories
+#View(data.frame(table(data$Life_stage_tested)))
+ 
+
+data <- data %>% 
+  mutate(Life_stage_tested = case_when(
+      Life_stage_tested == "adults" ~ "Adults",
+      Life_stage_tested == "Adults, Colonial organisms. Included gravid reproductive zooids but also incomplete zooids" ~ "Adults, Larvae or juveniles",
+      Life_stage_tested == "Adults, Progeny of these adults that were exposed to diff temperature as embryos (F2)" ~ "Adults, Larvae or juveniles",
+      Life_stage_tested == "Adults, Unclear" ~ "Unclear",
+      Life_stage_tested == "Adults, unfertilized eggs" ~ "Adults",
+      Life_stage_tested == "analysis is on homogenates generated from multiple individuals likely spanning all life-stages." ~ "Adults, Larvae or juveniles",
+      Life_stage_tested == "Embryos, Larvae and juveniles" ~ "Embryos, Larvae or juveniles",
+      Life_stage_tested == "exposure was at a single time point, but performed on a mixture of juveniles and adults for the one experiment" ~ "Adults, Larvae or juveniles",
+      Life_stage_tested == "it is one experiment, occurring at a single time point, but some of the individuals were adult and some were juvenile." ~ "Adults, Larvae or juveniles",
+      Life_stage_tested == "Larvae or juveniles, adults" ~ "Larvae or juveniles, Adults", 
+      Life_stage_tested == "Larvae or juveniles, Age-0 (could be juveniles or adults)" ~ "Larvae or juveniles",
+      Life_stage_tested == "Subadult" ~ "Larvae or juveniles", 
+      Life_stage_tested == "Unclear, 4 months old male rats" ~ "Adults", 
+      Life_stage_tested == "Unclear, Either juveniles, adults, or a mixture of both stages. Can't easily determine it." ~ "Unclear",
+      Life_stage_tested == "Unclear, I can infer its post-hatching, but cannot say with certainty whether they're juveniles or adults." ~ "Unclear",
+      Life_stage_tested == "Unclear, I think it is either juvenile or adult but they don't specify" ~ "Unclear",
+      Life_stage_tested == "Unclear, probably juvenile or adults" ~ "Unclear",
+      TRUE ~ Life_stage_tested
+    ))
+
+ data %>%
+  pull(Life_stage_tested) %>%       
+  strsplit(", ") %>%                    
+  unlist() %>%                           
+  unique() # All good.   
+
+
+ 
+```
+
+# **Data summaries**
+
+```{r}
+# General summary 
+n_distinct(data$Short_reference) # 1245 studies
+table(data$Journal) # 181 from Cons Phys, 562 from JEB, 533 from JTB.
+
+# Traits
+trait_summary <- data %>%
+  pull(Trait_category) %>%
+  strsplit(", ") %>%
+  unlist() %>%
+  table() %>%
+  as.data.frame() %>%
+  rename(`Trait_category` = ".", n = "Freq") %>%
+  mutate(percentage = (n / sum(n))*100) %>%
+  arrange(percentage)
+
+flextable(trait_summary) %>%
+  autofit() %>%
+  set_caption("Trait categories")
+
+# Stressors
+stressor_summary <- data %>%
+  pull(Climate_change_stressor) %>%
+  strsplit(", ") %>%
+  unlist() %>%
+  table() %>%
+  as.data.frame() %>%
+  rename(`Climate_stressor` = ".", n = "Freq") %>%
+  mutate(percentage = (n / sum(n))*100) %>%
+  arrange(percentage)
+
+flextable(stressor_summary) %>%
+  autofit() %>%
+  set_caption("Climate change stressors")
+
+# Taxa
+taxa_summary <- data %>%
+  pull(Taxonomic_group) %>%
+  strsplit(", ") %>%
+  unlist() %>%
+  table() %>%
+  as.data.frame() %>%
+  rename(`Taxonomic_group` = ".", n = "Freq") %>%
+  mutate(percentage = (n / sum(n))*100) %>%
+  arrange(percentage)
+
+flextable(taxa_summary) %>%
+  autofit() %>%
+  set_caption("Taxonomic groups")
+
+# Life stage exposed
+ls_exposed_summary <- data %>%
+  pull(Life_stage_exposed) %>%
+  strsplit(", ") %>%
+  unlist() %>%
+  table() %>%
+  as.data.frame() %>%
+  rename(Life_stage_exposed = ".", n = "Freq") %>%
+  mutate(percentage = (n / sum(n))*100) %>%
+  arrange(percentage)
+
+flextable(ls_exposed_summary) %>%
+  autofit() %>%
+  set_caption("Life stages exposed to the stressor")
+
+# Life stage tested
+ls_tested_summary <- data %>%
+  pull(Life_stage_tested) %>%
+  strsplit(", ") %>%
+  unlist() %>%
+  table() %>%
+  as.data.frame() %>%
+  rename(Life_stage_tested = ".", n = "Freq") %>%
+  mutate(percentage = (n / sum(n))*100) %>%
+  arrange(percentage)
+
+flextable(ls_tested_summary) %>%
+  autofit() %>%
+  set_caption("Life stages assessed in the study")
+
+########### Summaries within each category #################
+
+# Helper function for splitting + unnesting
+split_and_summarise <- function(data, group_var) {
+  life_stage_order <- c("Unclear", "Embryos", "Larvae or juveniles", "Adults")
+  data %>%
+    mutate(across(all_of(c("Life_stage_tested", group_var)), ~ strsplit(as.character(.), ", "))) %>%
+    unnest(Life_stage_tested) %>%
+    unnest(all_of(group_var)) %>%
+    mutate(Life_stage_tested = factor(Life_stage_tested, levels = life_stage_order)) %>%
+    count(!!sym(group_var), Life_stage_tested, name = "n") %>%
+    group_by(!!sym(group_var)) %>%
+    mutate(prop = n / sum(n)) %>%
+    ungroup()
+}
+
+# Life_stage_tested by Journal
+life_stage_by_journal <- split_and_summarise(data, "Journal")
+
+flextable(life_stage_by_journal) %>%
+  autofit() %>%
+  set_caption("Life stages tested across journals")
+
+# Life_stage_tested by Trait category
+life_stage_by_trait <- split_and_summarise(data, "Trait_category")
+
+flextable(life_stage_by_trait) %>%
+  autofit() %>%
+  set_caption("Life stages tested across trait categories")
+
+# Life_stage_tested by Taxonomic_group
+life_stage_by_taxa <- split_and_summarise(data, "Taxonomic_group")
+
+flextable(life_stage_by_taxa) %>%
+  autofit() %>%
+  set_caption("Life stages tested across taxonomic groups")
+
+# Life_stage_tested by Climate_change_stressor
+life_stage_by_stressor <- split_and_summarise(data, "Climate_change_stressor")
+
+flextable(life_stage_by_stressor) %>%
+  autofit() %>%
+  set_caption("Life stages tested across climate change stressors")
+
+```
+
+
+# **Figures**
+
+## Temporal trends
+
+### Number of studies over time by life stage
+```{r}
+# Prepare data for stream plot (proportions by year and life stage)
+ls_exposed_stream <- data %>%
+  select(Publication_year, Life_stage_exposed) %>%
+  mutate(Life_stage_exposed = strsplit(Life_stage_exposed, ", ")) %>%
+  unnest(Life_stage_exposed) %>%
+  group_by(Publication_year, Life_stage_exposed) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(Publication_year) %>%
+  mutate(proportion = n / sum(n)) %>%
+  ungroup() %>%
+  mutate(Life_stage_exposed = factor(
+    Life_stage_exposed,
+    levels = c(
+      "Adults",
+      "Larvae or juveniles",
+      "Embryos",             
+      "Mix (before and after hatching)",
+      "Mix (strictly after hatching)",
+      "Unclear"
+    )
+  ))
+
+
+# Plot
+ggplot(data = ls_exposed_stream,
+       aes(x = Publication_year,
+           y = n,
+           fill = Life_stage_exposed)) +
+  geom_stream(type = "ridge", n_grid = 50) +
+  geom_stream_label(type = "ridge", aes(label = Life_stage_exposed)) +
+  scale_fill_viridis_d(option = "D", begin = 0.15, end = 1, direction = 1) +
+  scale_x_continuous(
+    breaks = seq(min(ls_exposed_yearly$Publication_year),
+                 max(ls_exposed_yearly$Publication_year),
+                 by = 1)
+  ) +
+  labs(
+    x = "Publication year",
+    y = "Number of observations",
+    fill = "Life stage exposed"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right"
+  )
+
+```
+
+### Proportion of life stages exposed over time
+```{r}
+# Prepare data for stream plot (proportions by year and life stage)
+ls_exposed_stream <- data %>%
+  select(Publication_year, Life_stage_exposed) %>%
+  mutate(Life_stage_exposed = strsplit(Life_stage_exposed, ", ")) %>%
+  unnest(Life_stage_exposed) %>%
+  group_by(Publication_year, Life_stage_exposed) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(Publication_year) %>%
+  mutate(proportion = n / sum(n)) %>%
+  ungroup() %>%
+  mutate(Life_stage_exposed = factor(
+    Life_stage_exposed,
+    levels = c(
+      "Adults",
+      "Larvae or juveniles",
+      "Embryos",             
+      "Mix (before and after hatching)",
+      "Mix (strictly after hatching)",
+      "Unclear"
+    )
+  ))
+
+stream_ls_exposed <- ggplot(data = ls_exposed_stream,
+       aes(x = Publication_year,
+           y = proportion,
+           fill = Life_stage_exposed)) +
+  geom_stream(type = "proportion", alpha = 0.6) +
+  geom_stream_label(type = "ridge", aes(label = Life_stage_exposed), size  = 7) +
+ # scale_fill_viridis_d(option = "B", begin = 0.15, end = 1, direction = 1) +
+  scale_fill_manual(values = c("Unclear" = "gray70",       
+  "Embryos" = "#E6AB02",       
+  "Larvae or juveniles" = "#7570B3",  
+  "Adults" = "#1B9E77",
+  "Mix (before and after hatching)" = "#7D9364",
+  "Mix (strictly after hatching)" = "#AE8E5B"))+  
+  
+  scale_x_continuous(
+    breaks = seq(min(ls_exposed_stream$Publication_year, na.rm = TRUE),
+                 max(ls_exposed_stream$Publication_year, na.rm = TRUE),
+                 by = 1)
+  ) +
+  labs(
+    x = "Publication year",
+    y = "Proportion of studies",
+    fill = "Life stage exposed"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black", linewidth = 0.4),
+    axis.ticks = element_line(color = "black"),
+    axis.text.y = element_text(size = 16, hjust = 1, color = "black"),
+    axis.text.x = element_text(size = 15, angle = 45, hjust = 1),
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  )
+stream_ls_exposed
+
+ggsave(stream_ls_exposed, file = "Fig/prelim_fig1.png", width = 14, height = 11, dpi = 500)
+```
+
+
+
+### Proportion of life stages tested over time
+```{r}
+# Prepare data for stream plot (proportions by year and life stage)
+ls_tested_stream <- data %>%
+  select(Publication_year, Life_stage_tested) %>%
+  mutate(Life_stage_tested= strsplit(Life_stage_tested, ", ")) %>%
+  unnest(Life_stage_tested) %>%
+  group_by(Publication_year, Life_stage_tested) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(Publication_year) %>%
+  mutate(proportion = n / sum(n)) %>%
+  ungroup() %>%
+  mutate(Life_stage_tested = factor(
+    Life_stage_tested,
+    levels = c(
+      "Adults",
+      "Larvae or juveniles",
+      "Embryos",             
+      "Unclear"
+    )
+  ))
+
+stream_ls_tested <- ggplot(data = ls_tested_stream,
+       aes(x = Publication_year,
+           y = proportion,
+           fill = Life_stage_tested)) +
+  geom_stream(type = "proportion", alpha = 0.6) +
+  geom_stream_label(type = "ridge", aes(label = Life_stage_tested), size = 7) +
+  scale_fill_manual(values = c("Unclear" = "gray70",       
+  "Embryos" = "#E6AB02",       
+  "Larvae or juveniles" = "#7570B3",  
+  "Adults" = "#1B9E77"))+
+  scale_x_continuous(
+    breaks = seq(min(ls_tested_stream$Publication_year, na.rm = TRUE),
+                 max(ls_tested_stream$Publication_year, na.rm = TRUE),
+                 by = 1)
+  ) +
+  labs(
+    x = "Publication year",
+    y = "Proportion of studies",
+    fill = "Life stage tested"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black", linewidth = 0.4),
+    axis.ticks = element_line(color = "black"),
+    axis.text.y = element_text(size = 16, hjust = 1, color = "black"),
+    axis.text.x = element_text(size = 15, angle = 45, hjust = 1),
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  )
+stream_ls_tested
+
+ggsave(stream_ls_tested, file = "Fig/prelim_fig2.png", width = 14, height = 9, dpi = 500)
+```
+
+
+```{r}
+# Combine
+
+stream <- (stream_ls_exposed / stream_ls_tested) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+ggsave(stream, file = "Fig/prelim_fig3.png", width = 14, height = 18, dpi = 500)
+
+```
+
+## Proportion of life stages tested across the different variables extracted
+
+```{r}
+# Creata colour palette
+palette <- c("Unclear" = "gray70",       
+  "Embryos" = "#E6AB02",       
+  "Larvae or juveniles" = "#7570B3",  
+  "Adults" = "#1B9E77",
+  "Mix (before and after hatching)" = "#7D9364",
+  "Mix (strictly after hatching)" = "#AE8E5B")
+
+
+# Create custom theme
+custom_theme <- theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black", linewidth = 0.4),
+    axis.ticks = element_line(color = "black"),
+    axis.text.y = element_text(size = 16, hjust = 1, color = "black"),
+    axis.text.x = element_text(size = 15),
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_blank(),
+    legend.title = element_text(size = 16),
+    legend.text = element_text(size = 14),
+    legend.position = c(0.95, 0.05),
+    legend.justification = c("right", "bottom"),
+    legend.background = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, size = 1.25))
+```
+
+### Journal 
+```{r}
+# Overall sample size
+overall_journal <- sum(life_stage_by_journal$n)
+
+# Data summary for the plot
+plot_journal <- life_stage_by_journal %>%
+  group_by(Journal) %>%
+  mutate(n_total = sum(n)) %>%
+  ungroup() %>%
+  mutate(
+    Journal_label = reorder(Journal, n_total),
+    percentage = n / overall_journal * 100
+  )
+
+# Prepare a summary for the total counts per journal
+label_data <- plot_journal %>%
+  group_by(Journal_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+journal_plot <- ggplot(plot_journal, aes(x = Journal_label, y = percentage, fill = Life_stage_tested)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars), only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  #geom_text(data = label_data,
+            #mapping = aes(x = Journal_label, y = total_percentage + 2, label = label),
+            #inherit.aes = FALSE,
+            #size = 4.5,
+            #color = "black",
+            #hjust = 1) +
+  scale_fill_manual(values = palette, name = "Life stage assessed") +
+  scale_x_discrete(name = "Journal") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme 
+  
+journal_plot
+```
+
+
+### Trait categories
+```{r}
+# Overall sample size
+overall_trait <- sum(life_stage_by_trait$n)
+
+# Data summary for the plot
+plot_trait <- life_stage_by_trait %>%
+  filter(Trait_category != "Other") %>%  # Remove "Other" category for clarity
+  mutate(Trait_category = recode(Trait_category,
+       "Environmental tolerance and preference" = "Environmental tolerance/preference",
+       "Immune function and stress physiology" = "Immune function/stress physiology",
+       "Energetics and metabolism" = "Energetics/metabolism"
+  )) %>%
+  mutate(
+    Life_stage_tested = factor(
+      Life_stage_tested,
+      levels = c("Unclear", "Embryos", "Larvae or juveniles", "Adults")
+    )
+  ) %>%
+  group_by(Trait_category) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    trait_label = reorder(Trait_category, n_total),
+    percentage = n / overall_trait * 100  
+  )
+
+# Prepare a summary for the total counts per trait
+label_data <- plot_trait %>%
+  group_by(trait_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+trait_plot <- ggplot(plot_trait, aes(x = trait_label, y = percentage, fill = Life_stage_tested)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars); only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+ # geom_text(data = label_data,
+            #mapping = aes(x = trait_label, y = total_percentage + 2, label = label),
+            #inherit.aes = FALSE,
+            #size = 4.5,
+            #color = "black",
+            #hjust = 1) +
+  scale_fill_manual(values = palette, name = "Life stage assessed") +
+  scale_x_discrete(name = "Trait category") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme 
+
+trait_plot
+```
+
+
+### Taxa 
+```{r}
+# Overall sample size
+overall_taxa <- sum(life_stage_by_taxa$n)
+
+# Data summary for the plot
+plot_taxa <- life_stage_by_taxa %>%
+  group_by(Taxonomic_group) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    Taxa_label = reorder(Taxonomic_group, n_total),
+    percentage = n / overall_taxa * 100  
+  )
+
+# Prepare a summary for the total counts per taxonomic group
+label_data <- plot_taxa %>%
+  group_by(Taxa_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+taxa_plot <- ggplot(plot_taxa, aes(x = Taxa_label, y = percentage, fill = Life_stage_tested)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars), only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+ # geom_text(data = label_data,
+            #mapping = aes(x = Taxa_label, y = total_percentage + 2, label = label),
+            #inherit.aes = FALSE,
+            #size = 4.5,
+            #color = "black",
+            #hjust = 1) +
+  scale_fill_manual(values = palette, name = "Life stage assessed") +
+  scale_x_discrete(name = "Taxonomic group") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme 
+
+taxa_plot
+```
+
+
+### Climate change stressor
+```{r}
+stressor_label_exprs <- c(
+  "Other" = expression("Other"),
+  "Non-climatic stressor" = expression("Non"~"climatic"~"stressor"),
+  "Humidity/Water availability" = expression("Water"~"availability"),
+  "Salinity" = expression("Salinity"),
+  "pH" = expression("pH"),
+  "O₂/CO₂" = expression(O[2]*"/"*CO[2]),
+  "Temperature" = expression("Temperature")
+)
+
+# Overall sample size
+overall_stressor <- sum(life_stage_by_stressor$n)
+
+# Data summary for the plot
+plot_stressor <- life_stage_by_stressor %>%
+  filter(Climate_change_stressor != "Other" & 
+         Climate_change_stressor != "Interaction with non-climatic stressor") %>%  # Take out some categories for clarity
+  group_by(Climate_change_stressor) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    stressor_label = reorder(Climate_change_stressor, n_total),
+    percentage = n / overall_stressor * 100  
+  )
+
+# Prepare a summary for the total counts per stressor
+label_data <- plot_stressor %>%
+  group_by(stressor_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+stressor_plot <- ggplot(plot_stressor, aes(x = stressor_label, y = percentage, fill = Life_stage_tested)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars); only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  #geom_text(data = label_data,
+            #mapping = aes(x = stressor_label, y = total_percentage + 2, label = label),
+            #inherit.aes = FALSE,
+            #size = 4.5,
+            #color = "black",
+            #hjust = 0.7) +
+  scale_fill_manual(values = palette, name = "Life stage assessed") +
+  scale_x_discrete(name = "Stressor category", labels = stressor_label_exprs) +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme 
+
+stressor_plot
+```
+
+### Combine plots
+```{r}
+combined_plot1 <- (journal_plot / taxa_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+combined_plot1
+
+ggsave(combined_plot1, file = "Fig/prelim_fig4.png", width=15, height = 15, dpi = 750)
+
+
+combined_plot2 <- (stressor_plot / trait_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+combined_plot2
+
+ggsave(combined_plot2, file = "Fig/prelim_fig5.png", width=15, height = 16, dpi = 750)
+```
+
+## Proportion of life stages exposed to the stressor across the different variables extracted
+```{r}
+# Helper function for splitting + unnesting
+split_and_summarise2 <- function(data, group_var) {
+  life_stage_order <- c("Unclear", "Mix (strictly after hatching)", "Mix (before and after hatching)", "Embryos", "Larvae or juveniles", "Adults")
+  data %>%
+    mutate(across(all_of(c("Life_stage_exposed", group_var)), ~ strsplit(as.character(.), ", "))) %>%
+    unnest(Life_stage_exposed) %>%
+    unnest(all_of(group_var)) %>%
+    mutate(Life_stage_exposed = factor(Life_stage_exposed, levels = life_stage_order)) %>%
+    count(!!sym(group_var), Life_stage_exposed, name = "n") %>%
+    group_by(!!sym(group_var)) %>%
+    mutate(prop = n / sum(n)) %>%
+    ungroup()
+}
+
+# Life_stage_tested by Journal
+life_stage_by_journal_exp <- split_and_summarise2(data, "Journal")
+
+flextable(life_stage_by_journal_exp) %>%
+  autofit() %>%
+  set_caption("Life stages tested across journals")
+
+# Life_stage_tested by Trait category
+life_stage_by_trait_exp <- split_and_summarise2(data, "Trait_category")
+
+flextable(life_stage_by_trait_exp) %>%
+  autofit() %>%
+  set_caption("Life stages tested across trait categories")
+
+# Life_stage_tested by Taxonomic_group
+life_stage_by_taxa_exp <- split_and_summarise2(data, "Taxonomic_group")
+
+flextable(life_stage_by_taxa_exp) %>%
+  autofit() %>%
+  set_caption("Life stages tested across taxonomic groups")
+
+# Life_stage_tested by Climate_change_stressor
+life_stage_by_stressor_exp <- split_and_summarise2(data, "Climate_change_stressor")
+
+flextable(life_stage_by_stressor_exp) %>%
+  autofit() %>%
+  set_caption("Life stages tested across climate change stressors")
+```
+
+### Journal 
+```{r}
+# Overall sample size
+overall_journal <- sum(life_stage_by_journal_exp$n)
+
+# Data summary for the plot
+plot_journal_exp <- life_stage_by_journal_exp %>%
+  group_by(Journal) %>%
+  mutate(n_total = sum(n)) %>%
+  ungroup() %>%
+  mutate(
+    Journal_label = reorder(Journal, n_total),
+    percentage = n / overall_journal * 100  # each row’s percentage of overall studies
+  )
+
+# Prepare a summary for the total counts per journal
+label_data_exp <- plot_journal_exp %>%
+  group_by(Journal_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+journal_plot_exp <- ggplot(plot_journal_exp, aes(x = Journal_label, y = percentage, fill = Life_stage_exposed)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars), only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  #geom_text(data = label_data,
+            #mapping = aes(x = Journal_label, y = total_percentage + 2, label = label),
+            #inherit.aes = FALSE,
+            #size = 4.5,
+            #color = "black",
+            #hjust = 1) +
+  scale_fill_manual(values =palette, name = "Life stage exposed") +
+  scale_x_discrete(name = "Journal") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme 
+
+journal_plot_exp
+```
+
+
+### Trait categories
+```{r}
+# Overall sample size
+overall_trait_exp <- sum(life_stage_by_trait_exp$n)
+
+# Data summary for the plot
+plot_trait_exp <- life_stage_by_trait_exp %>%
+  filter(Trait_category != "Other") %>%  # Remove "Other" category for clarity
+  # Rename the trait categories
+  mutate(Trait_category = recode(Trait_category,
+       "Environmental tolerance and preference" = "Environmental tolerance/preference",
+       "Immune function and stress physiology" = "Immune function/stress physiology",
+       "Energetics and metabolism" = "Energetics/metabolism"
+  ))  %>%
+  group_by(Trait_category) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    trait_label = reorder(Trait_category, n_total),
+    percentage = n / overall_trait * 100
+  )
+
+# Prepare a summary for the total counts per trait
+label_data_exp <- plot_trait_exp %>%
+  group_by(trait_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greate
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+trait_plot_exp <- ggplot(plot_trait_exp, aes(x = trait_label, y = percentage, fill = Life_stage_exposed)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars); only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+ # geom_text(data = label_data,
+            #mapping = aes(x = trait_label, y = total_percentage + 2, label = label),
+            #inherit.aes = FALSE,
+            #size = 4.5,
+            #color = "black",
+            #hjust = 1) +
+  scale_fill_manual(values = palette, name = "Life stage exposed") +
+  scale_x_discrete(name = "Trait category") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme 
+
+trait_plot_exp
+```
+
+
+### Taxa 
+```{r}
+# Overall sample size
+overall_taxa_exp <- sum(life_stage_by_taxa_exp$n)
+
+# Data summary for the plot
+plot_taxa_exp <- life_stage_by_taxa_exp %>%
+  group_by(Taxonomic_group) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    Taxa_label = reorder(Taxonomic_group, n_total),
+    percentage = n / overall_taxa * 100  
+  )
+
+# Prepare a summary for the total counts per taxonomic group
+label_data_exp <- plot_taxa_exp %>%
+  group_by(Taxa_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+taxa_plot_exp <- ggplot(plot_taxa_exp, aes(x = Taxa_label, y = percentage, fill = Life_stage_exposed)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars), only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+ # geom_text(data = label_data,
+            #mapping = aes(x = Taxa_label, y = total_percentage + 2, label = label),
+            #inherit.aes = FALSE,
+            #size = 4.5,
+            #color = "black",
+            #hjust = 1) +
+  scale_fill_manual(values = palette, name = "Life stage exposed") +
+  scale_x_discrete(name = "Taxonomic group") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme 
+
+taxa_plot_exp
+```
+
+
+### Climate change stressor
+```{r}
+stressor_label_exprs <- c(
+  "Other" = expression("Other"),
+  "Non-climatic stressor" = expression("Non"~"climatic"~"stressor"),
+  "Humidity/Water availability" = expression("Water"~"availability"),
+  "Salinity" = expression("Salinity"),
+  "pH" = expression("pH"),
+  "O₂/CO₂" = expression(O[2]*"/"*CO[2]),
+  "Temperature" = expression("Temperature")
+)
+
+# Overall sample size
+overall_stressor_exp <- sum(life_stage_by_stressor_exp$n)
+
+# Data summary for the plot
+plot_stressor_exp <- life_stage_by_stressor_exp %>%
+  filter(Climate_change_stressor != "Other" & 
+         Climate_change_stressor != "Interaction with non-climatic stressor") %>%  # Take out some categories for clarity
+  group_by(Climate_change_stressor) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    stressor_label = reorder(Climate_change_stressor, n_total),
+    percentage = n / overall_stressor * 100 
+  )
+
+# Prepare a summary for the total counts per stressor
+label_data_exp <- plot_stressor_exp %>%
+  group_by(stressor_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+stressor_plot_exp <- ggplot(plot_stressor_exp, aes(x = stressor_label, y = percentage, fill = Life_stage_exposed)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars); only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  #geom_text(data = label_data,
+            #mapping = aes(x = stressor_label, y = total_percentage + 2, label = label),
+            #inherit.aes = FALSE,
+            #size = 4.5,
+            #color = "black",
+            #hjust = 0.7) +
+  scale_fill_manual(values = palette, name = "Life stage exposed") +
+  scale_x_discrete(name = "Stressor category", labels = stressor_label_exprs) +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme 
+
+stressor_plot_exp
+```
+
+### Combine plots
+```{r}
+combined_plot3 <- (journal_plot_exp / stressor_plot_exp) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+combined_plot3
+
+ggsave(combined_plot3, file = "Fig/prelim_fig6.png", width=15, height = 12, dpi = 750)
+
+
+combined_plot4 <- (taxa_plot_exp / trait_plot_exp) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+combined_plot4
+
+ggsave(combined_plot4, file = "Fig/prelim_fig7.png", width=15, height = 12, dpi = 750)
+```
+
+## Alternative plots
+```{r}
+combined_plot5 <- (journal_plot_exp / journal_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+ggsave(combined_plot5, file = "Fig/prelim_fig8.png", width=15, height = 15, dpi = 750)
+
+combined_plot6 <- (stressor_plot_exp / stressor_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+ggsave(combined_plot6, file = "Fig/prelim_fig9.png", width=15, height = 14, dpi = 750)
+
+combined_plot7 <- (taxa_plot_exp / taxa_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+ggsave(combined_plot7, file = "Fig/prelim_fig10.png", width=15, height = 14, dpi = 750)
+
+combined_plot8 <- (trait_plot_exp / trait_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+ggsave(combined_plot8, file = "Fig/prelim_fig11.png", width=15, height = 14, dpi = 750)
+```
+
+
+## Cord diagram to visualise studies with more than one life stage
+```{r}
+categories <- c("Adults", "Larvae or juveniles", "Embryos")
+
+dummy_list <- data %>%
+  mutate(lifestages = strsplit(Life_stage_tested, ",\\s*")) %>%
+  mutate(lifestages = map(lifestages, ~ trimws(.x))) %>%
+  # For each record, create a numeric vector of length length(categories) (0/1)
+  mutate(dummy = map(lifestages, ~ as.integer(categories %in% .x))) %>%
+  pull(dummy)
+
+# Add names to each dummy vector
+dummy_list <- map(dummy_list, ~ setNames(.x, categories))
+
+# Sum the outer products of the dummy vectors to form a co-occurrence matrix.
+# Each record contributes an outer product: if a record has both "Adults" and "Embryos", 
+# then outer(vec, vec) returns a matrix with a 1 in that cell.
+NetMatrix_lifestage <- Reduce("+", lapply(dummy_list, function(vec) outer(vec, vec)))
+
+# Check the matrix
+print(NetMatrix_lifestage)
+
+# Define a palette for the three life stages
+palette <- c(
+  "Adults" = "#1B9E77",
+  "Larvae or juveniles" = "#7570B3",
+  "Embryos" = "#E6AB02"
+)
+
+
+# Remove duplicated information
+NetMatrix_lifestage[lower.tri(NetMatrix_lifestage)] <- 0 
+
+# Create the chord diagram
+#pdf(file ="Fig/chord_diagram.pdf", width = 8, height = 8, pointsize = 10)
+png(file ="Fig/chord_diagram.png", pointsize = 4.5, res = 1000, width = 10, height = 10, unit = "cm",)
+
+chord <- chordDiagram(NetMatrix_lifestage, 
+                      annotationTrack = "grid", 
+                      preAllocateTracks = 1, 
+                      grid.col = palette)
+
+# Remove the sector names (labels) and just display the axis (numbers/ticks)
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim <- get.cell.meta.data("xlim")
+  ylim <- get.cell.meta.data("ylim")
+  sector.name <- get.cell.meta.data("sector.index")
+  # circos.text(mean(xlim), ylim[1] + .1, sector.name, facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))
+  circos.axis(h = "top", labels.cex = 0.75, major.tick.length = 0.2, 
+              sector.index = sector.name, track.index = 2)
+}, bg.border = NA)
+
+chord
+dev.off()
+```
+
+
+# Sensitivity analyses (supplementary figures)
+
+## Map studies only on temperature
+```{r}
+# Map across taxa, journals, trait categories 
+```
+
+
+## Map studies without the Journal of Thermal Biology
+```{r}
+stressor_summary_jtb <- data %>%
+  filter(Journal != "Journal of Thermal Biology") %>% 
+  pull(Climate_change_stressor) %>%
+  strsplit(", ") %>%
+  unlist() %>%
+  table() %>%
+  as.data.frame() %>%
+  rename(`Climate_stressor` = ".", n = "Freq") %>%
+  mutate(percentage = (n / sum(n))*100) %>%
+  arrange(percentage)
+
+flextable(stressor_summary_jtb) %>%
+  autofit() %>%
+  set_caption("Climate change stressors")
+
+
+# Life_stage_tested by stressor
+life_stage_by_stressor_jtb <- split_and_summarise(filter(data, Journal != "Journal of Thermal Biology"), "Climate_change_stressor")
+
+flextable(life_stage_by_stressor_jtb) %>%
+  autofit() %>%
+  set_caption("Life stages tested across climate change stressors")
+
+
+stressor_label_jtb <- c(
+  "Other" = expression("Other"),
+  "Non-climatic stressor" = expression("Non"~"climatic"~"stressor"),
+  "Humidity/Water availability" = expression("Water"~"availability"),
+  "Salinity" = expression("Salinity"),
+  "pH" = expression("pH"),
+  "O₂/CO₂" = expression(O[2]*"/"*CO[2]),
+  "Temperature" = expression("Temperature")
+)
+
+# Data summary for the plot
+overall_stressor_jtb <- sum(life_stage_by_stressor_jtb$n)
+
+plot_stressor_jtb <- life_stage_by_stressor_jtb %>%
+  filter(Climate_change_stressor != "Other" & 
+         Climate_change_stressor != "Interaction with non-climatic stressor") %>%  # Take out some categories for clarity
+  group_by(Climate_change_stressor) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    stressor_label = reorder(Climate_change_stressor, n_total),
+    percentage = n / overall_stressor * 100  # each row’s percentage of overall studies
+  )
+
+# Prepare a summary for the total counts per stressor
+label_data_jtb <- plot_stressor_jtb %>%
+  group_by(stressor_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+stressor_plot_jtb <- ggplot(plot_stressor_jtb, aes(x = stressor_label, y = percentage, fill = Life_stage_tested)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars); only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  #geom_text(data = label_data,
+            #mapping = aes(x = stressor_label, y = total_percentage + 2, label = label),
+            #inherit.aes = FALSE,
+            #size = 4.5,
+            #color = "black",
+            #hjust = 0.7) +
+  scale_fill_manual(values = palette, name = "Life stage assessed") +
+  scale_x_discrete(name = "Stressor category", labels = stressor_label_jtb) +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme 
+
+stressor_plot_jtb
+```
+
+
+## Map studies without development and unclear conditions
+```{r}
+# Map across climatic stressors, taxa, journals. 
+```
+
+
+# Package versions
+```{r}
+sessionInfo()
+```
+

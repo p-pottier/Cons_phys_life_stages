@@ -1,0 +1,87 @@
+---
+title: "Processing bibliographic files"
+author: "Patrice Pottier"
+date: '2024/10/16'
+output: html_document
+---
+
+# Load relevant packages
+```{r}
+library(litsearchr)
+library(synthesisr)
+library(tidyverse)
+library(stringr)
+set.seed(123)
+```
+
+# **Combine files**
+
+We performed separate searches for each journal, and we need to combine files. 
+
+```{r}
+# Import and combine bib files
+all_records <- import_results(directory="Bibliographic_searches/bib_format")
+
+# Remove duplicates based on titles. 
+all_records <- deduplicate(all_records, "title", method = "string_osa", to_lower=TRUE, rm_punctuation = TRUE) 
+
+# Save file in bibtex
+write_refs(all_records, format="bib", file=TRUE) # This file was saved in "Bibliographic_searches/all_bibliographic_records.bib"
+
+# Reformat for csv format
+all_records <- dplyr::select(all_records, type, title, authors = author, journal, abstract, year, doi, volume, issue=number, pages, article_number, keywords)
+# Save file in csv
+write_csv(all_records, file = "Bibliographic_searches/all_bibliographic_records.csv")
+```
+
+# **Divide bibliographic records between authors for screening and data extraction**
+```{r}
+# Define the number of samples
+num_samples <- 16 
+total_rows <- nrow(all_records)
+
+# Calculate the number of rows per sample
+rows_per_sample <- total_rows %/% num_samples
+remainder <- total_rows %% num_samples
+
+# Initialize an empty list to store the samples
+samples <- vector("list", num_samples)
+
+# Split the data frame
+start <- 1
+for (i in 1:num_samples) {
+  # Adjust the end row for the remainder
+  end <- start + rows_per_sample - 1
+  if (i <= remainder) {
+    end <- end + 1
+  }
+  
+  # Assign the subset to the list, applying the combine_pages function
+  samples[[i]] <- all_records[start:end,]
+  
+  # Update the start for the next iteration
+  start <- end + 1
+}
+
+# Write files
+for (i in 1:num_samples) {
+  assign(paste0("sample", i), samples[[i]])
+}
+
+# Save all files
+file_names <- c(
+  "N_Wu", "Z_Cowan", "W_Burggren", 
+  "M_Moyano", "B_Sun", "A_Gunderson", "R_Vasudeva", 
+  "S_Killen", "A_Chakraborty", "D_Ripley", "A_Pettersen", 
+  "M_Earhart", "J_McCoy", "M_Lagisz", "L_Pettinau", "K_Moutou") 
+
+for (i in 1:num_samples) {
+  write_csv(samples[[i]], file = paste0("Screening/Studies_to_screen/", file_names[i], ".csv"))
+}
+```
+
+# Package versions
+```{r}
+sessionInfo()
+```
+

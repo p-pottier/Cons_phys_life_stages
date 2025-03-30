@@ -47,3 +47,14 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Additional folders
+Admin/
+Manuscript/
+Pre-registration/
+
+# Additional files
+.docx
+.doc
+.ppt
+.pptx
