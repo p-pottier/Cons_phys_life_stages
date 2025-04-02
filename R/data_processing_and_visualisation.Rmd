@@ -22,7 +22,7 @@ set.seed(123)
 # **Import data**
 ```{r}
 # Import survey data
-raw_data <- read_csv("Data/extracted_data_cons_phys_life_stages.csv")
+raw_data <- read_csv("/Users/nicholaswu/Desktop/extracted_data_cons_phys_life_stages.csv")
 
 # Remove spaces in column names
 colnames(raw_data) <- gsub(" ", "_", colnames(raw_data))
@@ -456,7 +456,8 @@ ggplot(data = ls_exposed_stream,
   labs(
     x = "Publication year",
     y = "Number of observations",
-    fill = "Life stage exposed"
+    fill = "Life stage exposed",
+    title = "Life stage exposed"
   ) +
   theme_minimal(base_size = 12) +
   theme(
@@ -503,16 +504,18 @@ stream_ls_exposed <- ggplot(data = ls_exposed_stream,
   "Adults" = "#1B9E77",
   "Mix (before and after hatching)" = "#7D9364",
   "Mix (strictly after hatching)" = "#AE8E5B"))+  
-  
+  scale_y_continuous(expand = c(0, 0)) +
   scale_x_continuous(
     breaks = seq(min(ls_exposed_stream$Publication_year, na.rm = TRUE),
                  max(ls_exposed_stream$Publication_year, na.rm = TRUE),
-                 by = 1)
+                 by = 1),
+    expand = c(0, 0)
   ) +
   labs(
     x = "Publication year",
     y = "Proportion of studies",
-    fill = "Life stage exposed"
+    fill = "Life stage exposed",
+    title = "Life stage exposed"
   ) +
   theme_minimal(base_size = 12) +
   theme(
@@ -567,15 +570,18 @@ stream_ls_tested <- ggplot(data = ls_tested_stream,
   "Embryos" = "#E6AB02",       
   "Larvae or juveniles" = "#7570B3",  
   "Adults" = "#1B9E77"))+
+  scale_y_continuous(expand = c(0, 0)) +
   scale_x_continuous(
     breaks = seq(min(ls_tested_stream$Publication_year, na.rm = TRUE),
                  max(ls_tested_stream$Publication_year, na.rm = TRUE),
-                 by = 1)
+                 by = 1),
+    expand = c(0, 0)
   ) +
   labs(
     x = "Publication year",
     y = "Proportion of studies",
-    fill = "Life stage tested"
+    fill = "Life stage tested",
+    title = "Life stage tested"
   ) +
   theme_minimal(base_size = 12) +
   theme(
