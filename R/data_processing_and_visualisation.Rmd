@@ -449,8 +449,8 @@ ggplot(data = ls_exposed_stream,
   geom_stream_label(type = "ridge", aes(label = Life_stage_exposed)) +
   scale_fill_viridis_d(option = "D", begin = 0.15, end = 1, direction = 1) +
   scale_x_continuous(
-    breaks = seq(min(ls_exposed_yearly$Publication_year),
-                 max(ls_exposed_yearly$Publication_year),
+    breaks = seq(min(ls_exposed_stream$Publication_year),
+                 max(ls_exposed_stream$Publication_year),
                  by = 1)
   ) +
   labs(
