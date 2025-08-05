@@ -1,13 +1,64 @@
 ---
-title: "Processing and visualising data"
-author: "Patrice Pottier"
-date: '2025/01/17'
-output: html_document
+title: "**Embryos are largely understudied in conservation physiology**"
+author: Patrice Pottier
+date: "latest update: `r format(Sys.time(), '%d %B %Y')`"
+output: 
+  rmdformats::downcute:
+    code_folding: show
+    code_download: true
+    toc_depth: 6
+    toc_float:
+      collapsed: false
+    lightbox: true
+    thumbnails: false
+    downcute_theme: "chaos"
+    code_overflow: wrap
 editor_options: 
   chunk_output_type: console
 ---
 
-# Load relevant packages
+
+<style>
+#toc ul.nav li ul li {
+    display: none;
+    max-height: none;
+}
+
+#toc ul.nav li.active ul li  {
+    display: block;
+    max-height: none;
+}
+
+#toc ul.nav li ul li ul li {
+    max-height: none;
+    display: none !important;
+}
+
+#toc ul.nav li ul li.active ul li {
+    max-height: none;
+    display: block !important;
+    
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: darkturquoise !important;
+
+</style>
+
+
+```{r setup, include = FALSE}
+# knitr setting
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE, 
+  tidy = TRUE,
+  cache = TRUE,
+  echo=TRUE
+)
+```
+
+
+# **Load relevant packages** 
 ```{r}
 pacman::p_load(tidyverse,
                ggstream,
@@ -15,14 +66,14 @@ pacman::p_load(tidyverse,
                bibliometrix,
                bib2df,
                circlize,
-               patchwork)
+               patchwork) # p_load() will install packages if they are not installed already
 set.seed(123)
 ```
 
 # **Import data**
 ```{r}
 # Import survey data
-raw_data <- read_csv("/Users/nicholaswu/Desktop/extracted_data_cons_phys_life_stages.csv")
+raw_data <- read_csv("Data/extracted_data_cons_phys_life_stages.csv")
 
 # Remove spaces in column names
 colnames(raw_data) <- gsub(" ", "_", colnames(raw_data))
@@ -31,7 +82,7 @@ colnames(raw_data) <- gsub(" ", "_", colnames(raw_data))
 # **Data cleaning**
 
 ```{r}
-# Fix some typos with swapped titles or missing publication years
+# Fix some typos, titles swapped with the reference information, or missing publication years
 data <- raw_data
 data$Short_reference[data$Short_reference == "Illing_et_al_2029"] <- "Illing_et_al_2020"
 data$Short_reference[data$Short_reference == "Shartau_et_al_2002"] <- "Shartau_et_al_2016"
@@ -63,7 +114,7 @@ data <- rename(data,
 # View Trait categories
 #View(data.frame(table(raw_data$Trait_category)))
 
-# Delete and rename some observations
+# Delete and rename some observations for trait categories
 data <- data %>% 
   filter(Trait_category != "Biomechanics",
          Trait_category != "micro RNA expression") %>% 
@@ -120,7 +171,7 @@ data <- data %>%
 # View stressor categories
 #View(data.frame(table(data$Climate_change_stressor)))
 
-# Delete and rename some observations
+# Delete and rename some observations for environmental stressors
 data <- data %>% 
   filter(Climate_change_stressor != "pressure exposure",
          Climate_change_stressor != "Interaction with non-climatic stressor") %>% 
@@ -199,7 +250,7 @@ data <- data %>%
       Climate_change_stressor == "water restriction" ~ "Humidity/Water availability",
       TRUE ~ Climate_change_stressor
     ))
-# Diet and UV radiation were pooled together as "Other" because rare
+# Diet and UV radiation were pooled together as "Other" because they were rare
 
 # Check unique categories
  data %>%
@@ -249,7 +300,7 @@ data <- data %>%
 # View life stage tested categories
 #View(data.frame(table(data$Life_stage_tested)))
  
-
+# Delete and rename some observations for life stages
 data <- data %>% 
   mutate(Life_stage_tested = case_when(
       Life_stage_tested == "adults" ~ "Adults",
@@ -277,18 +328,63 @@ data <- data %>%
   strsplit(", ") %>%                    
   unlist() %>%                           
   unique() # All good.   
-
-
- 
 ```
 
-# **Data summaries**
+# **Save processed data and citation information** 
 
 ```{r}
-# General summary 
-n_distinct(data$Short_reference) # 1245 studies
-table(data$Journal) # 181 from Cons Phys, 562 from JEB, 533 from JTB.
+# Read files with bibliographic information prior to screening
+bib <- read_csv("Bibliographic_searches/all_bibliographic_records.csv")
+bib <- bib %>% rename(DOI = doi)
 
+# Left join the files to only keep the included studies
+included_studies <- left_join(data, bib, by="DOI")
+
+included_studies <- included_studies %>% 
+  dplyr::select(title, authors, journal, DOI, abstract, year, volume, issue, pages)
+
+# Save bibliographic file
+write_csv(included_studies, file = "Bibliographic_searches/all_included_studies.csv")
+
+# Save processed data 
+data <- data %>% 
+  dplyr::select(Short_reference, Publication_year, Title, DOI, Journal, Taxonomic_group, Climate_change_stressor, Life_stage_exposed, Life_stage_tested, Trait_category, Trait_details, Additional_comments)
+
+write_csv(data, file = "Data/cleaned_data.csv")
+```
+
+
+
+# **Overall data summary** {.tabset .tabset_fade .tabset_pills}
+
+The numbers below represent the number of studies from different journals, trait categories, climatic stressors, taxa, and life stages (exposed to the climatic stressor, or assessed for physiological traits).
+Note that because some studies have investigated multiple traits, stressors, taxa, and life stages, the numbers do not add to the total number of studies (n = 1245). 
+
+## **Journals** 
+
+```{r}
+# Number of studies per journal
+journal_summary <- data %>% 
+  pull(Journal) %>% 
+  table() %>% 
+  as.data.frame() %>% 
+  rename(`Journal` = ".", n = "Freq") %>%
+  mutate(percentage = (n / sum(n))*100) %>%
+  arrange(percentage)
+
+flextable(journal_summary) %>%
+  autofit() %>%
+  set_caption("Journals") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")  # 181 from Cons Phys, 562 from JEB, 533 from JTB.
+
+# Total number of studies
+n_distinct(data$DOI) # 1276 studies
+```
+
+## **Trait categories** 
+
+```{r}
 # Traits
 trait_summary <- data %>%
   pull(Trait_category) %>%
@@ -296,16 +392,62 @@ trait_summary <- data %>%
   unlist() %>%
   table() %>%
   as.data.frame() %>%
-  rename(`Trait_category` = ".", n = "Freq") %>%
+  rename(`Trait category` = ".", n = "Freq") %>%
   mutate(percentage = (n / sum(n))*100) %>%
-  arrange(percentage)
+  arrange(desc(percentage))
 
 flextable(trait_summary) %>%
   autofit() %>%
-  set_caption("Trait categories")
+  set_caption("Trait categories") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
 
+## **Taxonomic groups**
+
+```{r}
+# Taxa
+taxa_summary <- data %>%
+  pull(Taxonomic_group) %>%
+  strsplit(", ") %>%
+  unlist() %>%
+  table() %>%
+  as.data.frame() %>%
+  rename(`Taxonomic group` = ".", n = "Freq") %>%
+  mutate(percentage = (n / sum(n))*100) %>%
+  arrange(desc(percentage))
+
+flextable(taxa_summary) %>%
+  autofit() %>%
+  set_caption("Taxonomic groups") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
+
+## **Climate change stressors**
+
+```{r}
 # Stressors
 stressor_summary <- data %>%
+  pull(Climate_change_stressor) %>%
+  strsplit(", ") %>%
+  unlist() %>%
+  table() %>%
+  as.data.frame() %>%
+  rename(`Climatic stressor` = ".", n = "Freq") %>%
+  mutate(percentage = (n / sum(n))*100) %>%
+  arrange(desc(percentage))
+
+flextable(stressor_summary) %>%
+  autofit() %>%
+  set_caption("Climate change stressors") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+
+
+# After removing studies from the Journal of Thermal Biology (which is largely focusing on temperature)
+stressor_summary_jtb <- data %>%
+  filter(Journal != "Journal of Thermal Biology") %>% 
   pull(Climate_change_stressor) %>%
   strsplit(", ") %>%
   unlist() %>%
@@ -315,59 +457,144 @@ stressor_summary <- data %>%
   mutate(percentage = (n / sum(n))*100) %>%
   arrange(percentage)
 
-flextable(stressor_summary) %>%
+flextable(stressor_summary_jtb) %>%
   autofit() %>%
-  set_caption("Climate change stressors")
+  set_caption("Climate change stressors") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
 
-# Taxa
-taxa_summary <- data %>%
-  pull(Taxonomic_group) %>%
-  strsplit(", ") %>%
-  unlist() %>%
-  table() %>%
-  as.data.frame() %>%
-  rename(`Taxonomic_group` = ".", n = "Freq") %>%
-  mutate(percentage = (n / sum(n))*100) %>%
-  arrange(percentage)
-
-flextable(taxa_summary) %>%
-  autofit() %>%
-  set_caption("Taxonomic groups")
-
-# Life stage exposed
+## **Life stage exposed to the stressor** 
+```{r}
+# Life stage exposed to the climatic stressor
 ls_exposed_summary <- data %>%
   pull(Life_stage_exposed) %>%
   strsplit(", ") %>%
   unlist() %>%
   table() %>%
   as.data.frame() %>%
-  rename(Life_stage_exposed = ".", n = "Freq") %>%
+  rename(`Life stage exposed` = ".", n = "Freq") %>%
   mutate(percentage = (n / sum(n))*100) %>%
-  arrange(percentage)
+  arrange(desc(percentage))
 
 flextable(ls_exposed_summary) %>%
   autofit() %>%
-  set_caption("Life stages exposed to the stressor")
+  set_caption("Life stages exposed to the stressor") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
 
-# Life stage tested
+## **Life stage assessed for physiological traits** 
+
+```{r}
+# Life stage tested for physiological traits
 ls_tested_summary <- data %>%
   pull(Life_stage_tested) %>%
   strsplit(", ") %>%
   unlist() %>%
   table() %>%
   as.data.frame() %>%
-  rename(Life_stage_tested = ".", n = "Freq") %>%
+  rename(`Life stage tested` = ".", n = "Freq") %>%
   mutate(percentage = (n / sum(n))*100) %>%
-  arrange(percentage)
+  arrange(desc(percentage))
 
 flextable(ls_tested_summary) %>%
   autofit() %>%
-  set_caption("Life stages assessed in the study")
+  set_caption("Life stages assessed for physiological traits") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
 
-########### Summaries within each category #################
 
-# Helper function for splitting + unnesting
+
+# **Data summary by life stage (exposed to climatic stressors)** {.tabset .tabset_fade .tabset_pills}
+
+Here, data summaries are generated separately for each life stage. 
+In this study, we differentiated the life stages exposed to climatic stressors (presented here), to those assessed for physiological stressors (presented further below), as these sometimes differ, especially in the context of longitudinal studies. 
+
+## **Helper function**
+```{r}
+# Helper function for splitting + unnesting life stages
 split_and_summarise <- function(data, group_var) {
+  life_stage_order <- c("Unclear", "Mix (strictly after hatching)", "Mix (before and after hatching)", "Embryos", "Larvae or juveniles", "Adults")
+  data %>%
+    mutate(across(all_of(c("Life_stage_exposed", group_var)), ~ strsplit(as.character(.), ", "))) %>%
+    unnest(Life_stage_exposed) %>%
+    unnest(all_of(group_var)) %>%
+    mutate(Life_stage_exposed = factor(Life_stage_exposed, levels = life_stage_order)) %>%
+    count(!!sym(group_var), Life_stage_exposed, name = "n") %>%
+    group_by(!!sym(group_var)) %>%
+    mutate(proportion = n / sum(n)) %>%
+    ungroup() %>% 
+    rename(`Life stage exposed` = Life_stage_exposed)
+}
+
+```
+
+
+## **Journals** 
+
+```{r}
+# Life stage exposed by Journal
+life_stage_by_journal_exp <- split_and_summarise(data, "Journal")
+
+flextable(life_stage_by_journal_exp) %>%
+  autofit() %>%
+  set_caption("Life stages exposed across journals") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
+
+## **Trait categories** 
+
+```{r}
+# Life stage exposed by Trait category
+life_stage_by_trait_exp <- split_and_summarise(data, "Trait_category")
+
+flextable(life_stage_by_trait_exp) %>%
+  autofit() %>%
+  set_caption("Life stages exposed across trait categories") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
+
+## **Taxonomic groups**
+
+```{r}
+# Life stage exposed by Taxonomic_group
+life_stage_by_taxa_exp <- split_and_summarise(data, "Taxonomic_group")
+
+flextable(life_stage_by_taxa_exp) %>%
+  autofit() %>%
+  set_caption("Life stages exposed across taxonomic groups") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
+
+## **Climate change stressors**
+
+```{r}
+# Life stage exposed by Climate_change_stressor
+life_stage_by_stressor_exp <- split_and_summarise(data, "Climate_change_stressor")
+
+flextable(life_stage_by_stressor_exp) %>%
+  autofit() %>%
+  set_caption("Life stages exposed across climate change stressors") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
+
+
+# **Data summary by life stage (assessed for physiological traits)** {.tabset .tabset_fade .tabset_pills}
+
+Here, data summaries are generated separately for each life stage. 
+In this study, we differentiated the life stages exposed to climatic stressors (presented above), to those assessed for physiological stressors (presented here), as these sometimes differ, especially in the context of longitudinal studies.
+
+## **Helper function**
+```{r}
+
+# Helper function for splitting + unnesting the different life stages
+split_and_summarise2 <- function(data, group_var) {
   life_stage_order <- c("Unclear", "Embryos", "Larvae or juveniles", "Adults")
   data %>%
     mutate(across(all_of(c("Life_stage_tested", group_var)), ~ strsplit(as.character(.), ", "))) %>%
@@ -376,98 +603,106 @@ split_and_summarise <- function(data, group_var) {
     mutate(Life_stage_tested = factor(Life_stage_tested, levels = life_stage_order)) %>%
     count(!!sym(group_var), Life_stage_tested, name = "n") %>%
     group_by(!!sym(group_var)) %>%
-    mutate(prop = n / sum(n)) %>%
-    ungroup()
+    mutate(proportion = n / sum(n)) %>%
+    ungroup() %>% 
+    rename(`Life stage tested` = Life_stage_tested)
 }
+```
 
+## **Journals** 
+
+```{r}
 # Life_stage_tested by Journal
-life_stage_by_journal <- split_and_summarise(data, "Journal")
+life_stage_by_journal <- split_and_summarise2(data, "Journal")
 
 flextable(life_stage_by_journal) %>%
   autofit() %>%
-  set_caption("Life stages tested across journals")
+  set_caption("Life stages tested across journals") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
 
+## **Trait categories** 
+
+```{r}
 # Life_stage_tested by Trait category
-life_stage_by_trait <- split_and_summarise(data, "Trait_category")
+life_stage_by_trait <- split_and_summarise2(data, "Trait_category")
 
 flextable(life_stage_by_trait) %>%
   autofit() %>%
-  set_caption("Life stages tested across trait categories")
+  set_caption("Life stages tested across trait categories") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
 
+## **Taxonomic groups**
+
+```{r}
 # Life_stage_tested by Taxonomic_group
-life_stage_by_taxa <- split_and_summarise(data, "Taxonomic_group")
+life_stage_by_taxa <- split_and_summarise2(data, "Taxonomic_group")
 
 flextable(life_stage_by_taxa) %>%
   autofit() %>%
-  set_caption("Life stages tested across taxonomic groups")
+  set_caption("Life stages tested across taxonomic groups") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+```
 
+## **Climate change stressors**
+
+```{r}
 # Life_stage_tested by Climate_change_stressor
-life_stage_by_stressor <- split_and_summarise(data, "Climate_change_stressor")
+life_stage_by_stressor <- split_and_summarise2(data, "Climate_change_stressor")
 
 flextable(life_stage_by_stressor) %>%
   autofit() %>%
-  set_caption("Life stages tested across climate change stressors")
-
+  set_caption("Life stages tested across climate change stressors") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
 ```
 
 
 # **Figures**
 
-## Temporal trends
+Note that all figures were customised in Illustrator for cosmetic purposes. 
 
-### Number of studies over time by life stage
+## **Figure 1** 
+
+### **Colour palettes and themes**
+
 ```{r}
-# Prepare data for stream plot (proportions by year and life stage)
-ls_exposed_stream <- data %>%
-  select(Publication_year, Life_stage_exposed) %>%
-  mutate(Life_stage_exposed = strsplit(Life_stage_exposed, ", ")) %>%
-  unnest(Life_stage_exposed) %>%
-  group_by(Publication_year, Life_stage_exposed) %>%
-  summarise(n = n(), .groups = "drop") %>%
-  group_by(Publication_year) %>%
-  mutate(proportion = n / sum(n)) %>%
-  ungroup() %>%
-  mutate(Life_stage_exposed = factor(
-    Life_stage_exposed,
-    levels = c(
-      "Adults",
-      "Larvae or juveniles",
-      "Embryos",             
-      "Mix (before and after hatching)",
-      "Mix (strictly after hatching)",
-      "Unclear"
-    )
-  ))
+# Creata colour palette
+palette <- c(
+  "Unclear" = "gray70",       
+  "Embryos" = "#E6AB02",       
+  "Larvae or juveniles" = "#7570B3",  
+  "Adults" = "#1B9E77",
+  "Mix (before and after hatching)" = "#7D9364",
+  "Mix (strictly after hatching)" = "#AE8E5B")
 
-
-# Plot
-ggplot(data = ls_exposed_stream,
-       aes(x = Publication_year,
-           y = n,
-           fill = Life_stage_exposed)) +
-  geom_stream(type = "ridge", n_grid = 50) +
-  geom_stream_label(type = "ridge", aes(label = Life_stage_exposed)) +
-  scale_fill_viridis_d(option = "D", begin = 0.15, end = 1, direction = 1) +
-  scale_x_continuous(
-    breaks = seq(min(ls_exposed_stream$Publication_year),
-                 max(ls_exposed_stream$Publication_year),
-                 by = 1)
-  ) +
-  labs(
-    x = "Publication year",
-    y = "Number of observations",
-    fill = "Life stage exposed",
-    title = "Life stage exposed"
-  ) +
-  theme_minimal(base_size = 12) +
+# Create custom theme
+custom_theme <- theme_minimal(base_size = 14) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "right"
-  )
-
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black", linewidth = 0.4),
+    axis.ticks = element_line(color = "black"),
+    axis.text.y = element_text(size = 16, hjust = 1, color = "black"),
+    axis.text.x = element_text(size = 15),
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_blank(),
+    legend.title = element_text(size = 16),
+    legend.text = element_text(size = 14),
+    legend.position = c(0.95, 0.05),
+    legend.justification = c("right", "bottom"),
+    legend.background = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, size = 1.25))
 ```
 
-### Proportion of life stages exposed over time
+
+### **Temporal trends**
+
+#### Life stage exposed to the stressor 
 ```{r}
 # Prepare data for stream plot (proportions by year and life stage)
 ls_exposed_stream <- data %>%
@@ -491,54 +726,32 @@ ls_exposed_stream <- data %>%
     )
   ))
 
+# Create plot
 stream_ls_exposed <- ggplot(data = ls_exposed_stream,
        aes(x = Publication_year,
            y = proportion,
            fill = Life_stage_exposed)) +
   geom_stream(type = "proportion", alpha = 0.6) +
   geom_stream_label(type = "ridge", aes(label = Life_stage_exposed), size  = 7) +
- # scale_fill_viridis_d(option = "B", begin = 0.15, end = 1, direction = 1) +
-  scale_fill_manual(values = c("Unclear" = "gray70",       
-  "Embryos" = "#E6AB02",       
-  "Larvae or juveniles" = "#7570B3",  
-  "Adults" = "#1B9E77",
-  "Mix (before and after hatching)" = "#7D9364",
-  "Mix (strictly after hatching)" = "#AE8E5B"))+  
-  scale_y_continuous(expand = c(0, 0)) +
+  scale_fill_manual(values = palette)+  
+  scale_y_continuous(breaks = seq(0, 1, 0.25),
+                     expand = c(0, 0)) +
   scale_x_continuous(
     breaks = seq(min(ls_exposed_stream$Publication_year, na.rm = TRUE),
                  max(ls_exposed_stream$Publication_year, na.rm = TRUE),
-                 by = 1),
-    expand = c(0, 0)
-  ) +
+                 by = 2),
+    expand = c(0, 0)) +
   labs(
     x = "Publication year",
     y = "Proportion of studies",
-    fill = "Life stage exposed",
-    title = "Life stage exposed"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "none",
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.line = element_line(color = "black", linewidth = 0.4),
-    axis.ticks = element_line(color = "black"),
-    axis.text.y = element_text(size = 16, hjust = 1, color = "black"),
-    axis.text.x = element_text(size = 15, angle = 45, hjust = 1),
-    axis.title.x = element_text(size = 24),
-    axis.title.y = element_text(size = 24),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12)
-  )
-stream_ls_exposed
-
-ggsave(stream_ls_exposed, file = "Fig/prelim_fig1.png", width = 14, height = 11, dpi = 500)
+    title = "Life stage exposed") + 
+  custom_theme + 
+  theme(legend.position = "none")
 ```
 
 
+#### Life stage tested for physiological traits 
 
-### Proportion of life stages tested over time
 ```{r}
 # Prepare data for stream plot (proportions by year and life stage)
 ls_tested_stream <- data %>%
@@ -560,90 +773,93 @@ ls_tested_stream <- data %>%
     )
   ))
 
+# Create plot
 stream_ls_tested <- ggplot(data = ls_tested_stream,
        aes(x = Publication_year,
            y = proportion,
            fill = Life_stage_tested)) +
   geom_stream(type = "proportion", alpha = 0.6) +
   geom_stream_label(type = "ridge", aes(label = Life_stage_tested), size = 7) +
-  scale_fill_manual(values = c("Unclear" = "gray70",       
-  "Embryos" = "#E6AB02",       
-  "Larvae or juveniles" = "#7570B3",  
-  "Adults" = "#1B9E77"))+
+  scale_fill_manual(values = palette)+
   scale_y_continuous(expand = c(0, 0)) +
   scale_x_continuous(
     breaks = seq(min(ls_tested_stream$Publication_year, na.rm = TRUE),
                  max(ls_tested_stream$Publication_year, na.rm = TRUE),
-                 by = 1),
+                 by = 2),
     expand = c(0, 0)
   ) +
   labs(
     x = "Publication year",
     y = "Proportion of studies",
     fill = "Life stage tested",
-    title = "Life stage tested"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "none",
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.line = element_line(color = "black", linewidth = 0.4),
-    axis.ticks = element_line(color = "black"),
-    axis.text.y = element_text(size = 16, hjust = 1, color = "black"),
-    axis.text.x = element_text(size = 15, angle = 45, hjust = 1),
-    axis.title.x = element_text(size = 24),
-    axis.title.y = element_text(size = 24),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12)
+    title = "Life stage tested") + 
+  custom_theme + 
+  theme(legend.position = "none")
+
+```
+
+#### Combine plots
+```{r, fig.height = 10, fig.width = 20}
+# Combine plots
+stream_plot <- (stream_ls_exposed | stream_ls_tested) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+stream_plot
+```
+
+
+### **Trends across journals** 
+
+#### Life stage exposed to the stressor 
+
+```{r}
+# Overall sample size
+overall_journal_exp <- sum(life_stage_by_journal_exp$n)
+
+# Data summary for the plot
+plot_journal_exp <- life_stage_by_journal_exp %>%
+  group_by(Journal) %>%
+  mutate(n_total = sum(n)) %>%
+  ungroup() %>%
+  mutate(
+    Journal_label = reorder(Journal, n_total),
+    percentage = n / overall_journal_exp * 100  # each row’s percentage of overall studies
   )
-stream_ls_tested
 
-ggsave(stream_ls_tested, file = "Fig/prelim_fig2.png", width = 14, height = 9, dpi = 500)
+# Prepare a summary for the total counts per journal
+label_data_exp <- plot_journal_exp %>%
+  group_by(Journal_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+journal_plot_exposed <- ggplot(plot_journal_exp, aes(x = Journal_label, y = percentage, fill = `Life stage exposed`)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars), only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  scale_fill_manual(values =palette, name = "Life stage exposed") +
+  scale_x_discrete(name = "Journal") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)) +
+  coord_flip() +
+  custom_theme 
 ```
 
 
-```{r}
-# Combine
+#### Life stage tested for physiological traits 
 
-stream <- (stream_ls_exposed / stream_ls_tested) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
-
-ggsave(stream, file = "Fig/prelim_fig3.png", width = 14, height = 18, dpi = 500)
-
-```
-
-## Proportion of life stages tested across the different variables extracted
-
-```{r}
-# Creata colour palette
-palette <- c("Unclear" = "gray70",       
-  "Embryos" = "#E6AB02",       
-  "Larvae or juveniles" = "#7570B3",  
-  "Adults" = "#1B9E77",
-  "Mix (before and after hatching)" = "#7D9364",
-  "Mix (strictly after hatching)" = "#AE8E5B")
-
-
-# Create custom theme
-custom_theme <- theme_minimal(base_size = 14) +
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.line = element_line(color = "black", linewidth = 0.4),
-    axis.ticks = element_line(color = "black"),
-    axis.text.y = element_text(size = 16, hjust = 1, color = "black"),
-    axis.text.x = element_text(size = 15),
-    axis.title.x = element_text(size = 24),
-    axis.title.y = element_blank(),
-    legend.title = element_text(size = 16),
-    legend.text = element_text(size = 14),
-    legend.position = c(0.95, 0.05),
-    legend.justification = c("right", "bottom"),
-    legend.background = element_blank(),
-    panel.border = element_rect(color = "black", fill = NA, size = 1.25))
-```
-
-### Journal 
 ```{r}
 # Overall sample size
 overall_journal <- sum(life_stage_by_journal$n)
@@ -672,34 +888,109 @@ label_data <- plot_journal %>%
   )
 
 # Create the plot
-journal_plot <- ggplot(plot_journal, aes(x = Journal_label, y = percentage, fill = Life_stage_tested)) +
+journal_plot_tested <- ggplot(plot_journal, aes(x = Journal_label, y = percentage, fill = `Life stage tested`)) +
   geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
   # Labels for individual segments (inside the bars), only display if n > 15
   geom_text(aes(label = ifelse(n >= 15, n, "")),
             position = position_stack(vjust = 0.5),
             size = 5,
             color = "black") +
-  #geom_text(data = label_data,
-            #mapping = aes(x = Journal_label, y = total_percentage + 2, label = label),
-            #inherit.aes = FALSE,
-            #size = 4.5,
-            #color = "black",
-            #hjust = 1) +
   scale_fill_manual(values = palette, name = "Life stage assessed") +
   scale_x_discrete(name = "Journal") +
   scale_y_continuous(
     name = "Percentage of studies (%)",
     breaks = seq(0, 100, by = 10),
-    expand = c(0, 1)
-  ) +
+    expand = c(0, 1)) +
   coord_flip() +
   custom_theme 
-  
+```
+
+#### Combine plots 
+
+```{r, fig.height = 10, fig.width = 20}
+# Combine plots
+journal_plot <- (journal_plot_exposed | journal_plot_tested) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
 journal_plot
 ```
 
 
-### Trait categories
+### **Combine plots** 
+
+```{r, fig.height = 15, fig.width = 20}
+
+figure_1 <- (stream_plot /  journal_plot) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+figure_1
+
+ggsave(figure_1, file = "Fig/figure_1.svg", width=30, height = 20, dpi = 1200)
+```
+
+## **Figure 2** 
+
+### **Trends across trait categories**
+
+#### Life stage exposed to the stressor 
+
+```{r}
+# Overall sample size
+overall_trait_exp <- sum(life_stage_by_trait_exp$n)
+
+# Data summary for the plot
+plot_trait_exp <- life_stage_by_trait_exp %>%
+  filter(Trait_category != "Other") %>%  # Remove "Other" category for clarity
+  # Rename the trait categories
+  mutate(Trait_category = recode(Trait_category,
+       "Environmental tolerance and preference" = "Environmental tolerance/preference",
+       "Immune function and stress physiology" = "Immune function/stress physiology",
+       "Energetics and metabolism" = "Energetics/metabolism"
+  ))  %>%
+  group_by(Trait_category) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    trait_label = reorder(Trait_category, n_total),
+    percentage = n / overall_trait_exp * 100
+  )
+
+# Prepare a summary for the total counts per trait
+label_data_exp <- plot_trait_exp %>%
+  group_by(trait_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greate
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+trait_plot_exposed <- ggplot(plot_trait_exp, aes(x = trait_label, y = percentage, fill = `Life stage exposed`)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars); only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  scale_fill_manual(values = palette, name = "Life stage exposed") +
+  scale_x_discrete(name = "Trait category") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)) +
+  coord_flip() +
+  custom_theme 
+```
+
+
+#### Life stage tested for physiological traits 
+
 ```{r}
 # Overall sample size
 overall_trait <- sum(life_stage_by_trait$n)
@@ -713,8 +1004,8 @@ plot_trait <- life_stage_by_trait %>%
        "Energetics and metabolism" = "Energetics/metabolism"
   )) %>%
   mutate(
-    Life_stage_tested = factor(
-      Life_stage_tested,
+    `Life stage tested` = factor(
+      `Life stage tested`,
       levels = c("Unclear", "Embryos", "Larvae or juveniles", "Adults")
     )
   ) %>%
@@ -742,34 +1033,90 @@ label_data <- plot_trait %>%
   )
 
 # Create the plot
-trait_plot <- ggplot(plot_trait, aes(x = trait_label, y = percentage, fill = Life_stage_tested)) +
+trait_plot_tested <- ggplot(plot_trait, aes(x = trait_label, y = percentage, fill = `Life stage tested`)) +
   geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
   # Labels for individual segments (inside the bars); only display if n > 15
   geom_text(aes(label = ifelse(n >= 15, n, "")),
             position = position_stack(vjust = 0.5),
             size = 5,
             color = "black") +
- # geom_text(data = label_data,
-            #mapping = aes(x = trait_label, y = total_percentage + 2, label = label),
-            #inherit.aes = FALSE,
-            #size = 4.5,
-            #color = "black",
-            #hjust = 1) +
   scale_fill_manual(values = palette, name = "Life stage assessed") +
   scale_x_discrete(name = "Trait category") +
   scale_y_continuous(
     name = "Percentage of studies (%)",
     breaks = seq(0, 100, by = 10),
-    expand = c(0, 1)
-  ) +
+    expand = c(0, 1)) +
   coord_flip() +
   custom_theme 
+```
+
+#### Combine plots 
+
+```{r, fig.height = 13, fig.width = 20}
+# Combine plots
+trait_plot <- (trait_plot_exposed | trait_plot_tested) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
 
 trait_plot
 ```
 
 
-### Taxa 
+### **Trends across taxonomic groups**
+
+#### Life stage exposed to the stressor 
+
+```{r}
+# Overall sample size
+overall_taxa_exp <- sum(life_stage_by_taxa_exp$n)
+
+# Data summary for the plot
+plot_taxa_exp <- life_stage_by_taxa_exp %>%
+  group_by(Taxonomic_group) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    Taxa_label = reorder(Taxonomic_group, n_total),
+    percentage = n / overall_taxa_exp * 100  
+  )
+
+# Prepare a summary for the total counts per taxonomic group
+label_data_exp <- plot_taxa_exp %>%
+  group_by(Taxa_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+taxa_plot_exposed <- ggplot(plot_taxa_exp, aes(x = Taxa_label, y = percentage, fill = `Life stage exposed`)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars), only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  scale_fill_manual(values = palette, name = "Life stage exposed") +
+  scale_x_discrete(name = "Taxonomic group") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)) +
+  coord_flip() +
+  custom_theme 
+
+```
+
+
+
+#### Life stage tested for physiological traits 
+
 ```{r}
 # Overall sample size
 overall_taxa <- sum(life_stage_by_taxa$n)
@@ -800,34 +1147,102 @@ label_data <- plot_taxa %>%
   )
 
 # Create the plot
-taxa_plot <- ggplot(plot_taxa, aes(x = Taxa_label, y = percentage, fill = Life_stage_tested)) +
+taxa_plot_tested <- ggplot(plot_taxa, aes(x = Taxa_label, y = percentage, fill = `Life stage tested`)) +
   geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
   # Labels for individual segments (inside the bars), only display if n > 15
   geom_text(aes(label = ifelse(n >= 15, n, "")),
             position = position_stack(vjust = 0.5),
             size = 5,
             color = "black") +
- # geom_text(data = label_data,
-            #mapping = aes(x = Taxa_label, y = total_percentage + 2, label = label),
-            #inherit.aes = FALSE,
-            #size = 4.5,
-            #color = "black",
-            #hjust = 1) +
+
   scale_fill_manual(values = palette, name = "Life stage assessed") +
   scale_x_discrete(name = "Taxonomic group") +
   scale_y_continuous(
     name = "Percentage of studies (%)",
     breaks = seq(0, 100, by = 10),
-    expand = c(0, 1)
-  ) +
+    expand = c(0, 1)) +
   coord_flip() +
   custom_theme 
+```
+
+#### Combine plots 
+
+```{r, fig.height = 13, fig.width = 20}
+# Combine plots
+taxa_plot <- (taxa_plot_exposed | taxa_plot_tested) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
 
 taxa_plot
 ```
 
 
-### Climate change stressor
+### **Trends across climatic stressors**
+
+#### Life stage exposed to the stressor 
+
+```{r}
+stressor_label_exprs <- c(
+  "Other" = expression("Other"),
+  "Non-climatic stressor" = expression("Non"~"climatic"~"stressor"),
+  "Humidity/Water availability" = expression("Water"~"availability"),
+  "Salinity" = expression("Salinity"),
+  "pH" = expression("pH"),
+  "O₂/CO₂" = expression(O[2]*"/"*CO[2]),
+  "Temperature" = expression("Temperature")
+)
+
+# Overall sample size
+overall_stressor_exp <- sum(life_stage_by_stressor_exp$n)
+
+# Data summary for the plot
+plot_stressor_exp <- life_stage_by_stressor_exp %>%
+  filter(Climate_change_stressor != "Other" & 
+         Climate_change_stressor != "Interaction with non-climatic stressor") %>%  # Take out some categories for clarity
+  group_by(Climate_change_stressor) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    stressor_label = reorder(Climate_change_stressor, n_total),
+    percentage = n / overall_stressor_exp * 100 
+  )
+
+# Prepare a summary for the total counts per stressor
+label_data_exp <- plot_stressor_exp %>%
+  group_by(stressor_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+stressor_plot_exposed <- ggplot(plot_stressor_exp, aes(x = stressor_label, y = percentage, fill = `Life stage exposed`)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars); only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  scale_fill_manual(values = palette, name = "Life stage exposed") +
+  scale_x_discrete(name = "Stressor category", labels = stressor_label_exprs) +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)) +
+  coord_flip() +
+  custom_theme 
+```
+
+
+
+#### Life stage tested for physiological traits 
+
 ```{r}
 stressor_label_exprs <- c(
   "Other" = expression("Other"),
@@ -870,110 +1285,259 @@ label_data <- plot_stressor %>%
   )
 
 # Create the plot
-stressor_plot <- ggplot(plot_stressor, aes(x = stressor_label, y = percentage, fill = Life_stage_tested)) +
+stressor_plot_tested <- ggplot(plot_stressor, aes(x = stressor_label, y = percentage, fill = `Life stage tested`)) +
   geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
   # Labels for individual segments (inside the bars); only display if n > 15
   geom_text(aes(label = ifelse(n >= 15, n, "")),
             position = position_stack(vjust = 0.5),
             size = 5,
             color = "black") +
-  #geom_text(data = label_data,
-            #mapping = aes(x = stressor_label, y = total_percentage + 2, label = label),
-            #inherit.aes = FALSE,
-            #size = 4.5,
-            #color = "black",
-            #hjust = 0.7) +
   scale_fill_manual(values = palette, name = "Life stage assessed") +
   scale_x_discrete(name = "Stressor category", labels = stressor_label_exprs) +
   scale_y_continuous(
     name = "Percentage of studies (%)",
     breaks = seq(0, 100, by = 10),
-    expand = c(0, 1)
-  ) +
-  coord_flip() +
+    expand = c(0, 1)) +
+  coord_flip() + 
   custom_theme 
+```
+
+#### Combine plots 
+
+```{r, fig.height = 13, fig.width = 20}
+# Combine plots
+stressor_plot <- (stressor_plot_exposed | stressor_plot_tested) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
 
 stressor_plot
 ```
 
-### Combine plots
-```{r}
-combined_plot1 <- (journal_plot / taxa_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
 
-combined_plot1
+### **Combine plots** 
 
-ggsave(combined_plot1, file = "Fig/prelim_fig4.png", width=15, height = 15, dpi = 750)
+```{r, fig.height = 16, fig.width = 20}
 
+figure_2 <- (trait_plot /  taxa_plot / stressor_plot) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
 
-combined_plot2 <- (stressor_plot / trait_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+figure_2
 
-combined_plot2
-
-ggsave(combined_plot2, file = "Fig/prelim_fig5.png", width=15, height = 16, dpi = 750)
+ggsave(figure_2, file = "Fig/figure_2.svg", width=40, height = 30, dpi = 1200, limitsize = FALSE)
 ```
 
-## Proportion of life stages exposed to the stressor across the different variables extracted
+
+## **Figure 3** 
+
+Cord diagram to visualise studies with single vs multiple life stages
+
 ```{r}
-# Helper function for splitting + unnesting
-split_and_summarise2 <- function(data, group_var) {
-  life_stage_order <- c("Unclear", "Mix (strictly after hatching)", "Mix (before and after hatching)", "Embryos", "Larvae or juveniles", "Adults")
-  data %>%
-    mutate(across(all_of(c("Life_stage_exposed", group_var)), ~ strsplit(as.character(.), ", "))) %>%
-    unnest(Life_stage_exposed) %>%
-    unnest(all_of(group_var)) %>%
-    mutate(Life_stage_exposed = factor(Life_stage_exposed, levels = life_stage_order)) %>%
-    count(!!sym(group_var), Life_stage_exposed, name = "n") %>%
-    group_by(!!sym(group_var)) %>%
-    mutate(prop = n / sum(n)) %>%
-    ungroup()
-}
+categories <- c("Adults", "Larvae or juveniles", "Embryos")
 
-# Life_stage_tested by Journal
-life_stage_by_journal_exp <- split_and_summarise2(data, "Journal")
+# Parse life stages
+data <- data %>% 
+  mutate(lifestages = strsplit(Life_stage_tested, ",\\s*") %>% map(trimws))
 
-flextable(life_stage_by_journal_exp) %>%
-  autofit() %>%
-  set_caption("Life stages tested across journals")
+# Dummy list to store matrix
+dummy_list <- data %>% 
+  mutate(dummy = map(lifestages, ~ as.integer(categories %in% .x))) %>% 
+  pull(dummy) %>% 
+  map(~ setNames(.x, categories))
 
-# Life_stage_tested by Trait category
-life_stage_by_trait_exp <- split_and_summarise2(data, "Trait_category")
+# Add names to each dummy vector
+dummy_list <- map(dummy_list, ~ setNames(.x, categories))
 
-flextable(life_stage_by_trait_exp) %>%
-  autofit() %>%
-  set_caption("Life stages tested across trait categories")
+# Sum the outer products of the dummy vectors to form a co-occurrence matrix.
+# Each record contributes an outer product: if a record has both "Adults" and "Embryos", 
+# then outer(vec, vec) returns a matrix with a 1 in that cell.
+NetMatrix_lifestage <- Reduce("+", lapply(dummy_list, function(vec) outer(vec, vec)))
 
-# Life_stage_tested by Taxonomic_group
-life_stage_by_taxa_exp <- split_and_summarise2(data, "Taxonomic_group")
+# Separate cases where there is a single vs. multiple life stages
+exclusive_counts <- sapply(categories, function(cat) {
+  sum(lengths(data$lifestages) == 1 & vapply(data$lifestages, function(x) x[1] == cat, logical(1)))
+})
 
-flextable(life_stage_by_taxa_exp) %>%
-  autofit() %>%
-  set_caption("Life stages tested across taxonomic groups")
+diag(NetMatrix_lifestage) <- exclusive_counts   # replace diagonal
+NetMatrix_lifestage[lower.tri(NetMatrix_lifestage)] <- 0  # Remove duplicated information
 
-# Life_stage_tested by Climate_change_stressor
-life_stage_by_stressor_exp <- split_and_summarise2(data, "Climate_change_stressor")
+# Check the matrix
+print(NetMatrix_lifestage)
 
-flextable(life_stage_by_stressor_exp) %>%
-  autofit() %>%
-  set_caption("Life stages tested across climate change stressors")
+
+# Create the chord diagram
+#pdf(file ="Fig/figure_3.pdf", width = 8, height = 8, pointsize = 10)
+png(file ="Fig/figure_3.png", pointsize = 4.5, res = 1000, width = 10, height = 10, unit = "cm",)
+
+circos.par(gap.after = c(2,2,2)) # Adjust space between categories
+figure_3 <- chordDiagram(NetMatrix_lifestage, 
+                      annotationTrack = "grid", 
+                      preAllocateTracks = 1, 
+                      grid.col = palette,
+                      self.link = 1) # Don't duplicate data
+
+# Remove the sector names (labels) and just display the axis (numbers/ticks)
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim <- get.cell.meta.data("xlim")
+  ylim <- get.cell.meta.data("ylim")
+  sector.name <- get.cell.meta.data("sector.index")
+  circos.axis(h = "top", labels.cex = 0.75, major.tick.length = 0.2, 
+              sector.index = sector.name, track.index = 2)
+}, bg.border = NA)
+
+figure_3
+dev.off()
 ```
 
-### Journal 
+
+# **Supplementary figures**
+
+## **Figure S1**
+
+This figure was generated in powerpoint.
+
+## **Figure S2**
+
+This figure reproduces the patterns in figure 1, but only keeping studies measuring responses to temperature (i.e., the most common climatic stressor)
+
+### **Temporal trends**
+
+#### Life stage exposed to the stressor 
 ```{r}
+# Filter to studies on temperature only
+data_temp <- filter(data, Climate_change_stressor == "Temperature") # 765 studies
+
+# Prepare data for stream plot (proportions by year and life stage)
+ls_exposed_stream_temp <- data_temp %>%
+  select(Publication_year, Life_stage_exposed) %>%
+  mutate(Life_stage_exposed = strsplit(Life_stage_exposed, ", ")) %>%
+  unnest(Life_stage_exposed) %>%
+  group_by(Publication_year, Life_stage_exposed) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(Publication_year) %>%
+  mutate(proportion = n / sum(n)) %>%
+  ungroup() %>%
+  mutate(Life_stage_exposed = factor(
+    Life_stage_exposed,
+    levels = c(
+      "Adults",
+      "Larvae or juveniles",
+      "Embryos",             
+      "Mix (before and after hatching)",
+      "Mix (strictly after hatching)",
+      "Unclear"
+    )
+  ))
+
+# Create plot
+stream_ls_exposed_temp <- ggplot(data = ls_exposed_stream_temp,
+       aes(x = Publication_year,
+           y = proportion,
+           fill = Life_stage_exposed)) +
+  geom_stream(type = "proportion", alpha = 0.6) +
+  geom_stream_label(type = "ridge", aes(label = Life_stage_exposed), size  = 7) +
+  scale_fill_manual(values = palette)+  
+  scale_y_continuous(breaks = seq(0, 1, 0.25),
+                     expand = c(0, 0)) +
+  scale_x_continuous(
+    breaks = seq(min(ls_exposed_stream$Publication_year, na.rm = TRUE),
+                 max(ls_exposed_stream$Publication_year, na.rm = TRUE),
+                 by = 2),
+    expand = c(0, 0)) +
+  labs(
+    x = "Publication year",
+    y = "Proportion of studies",
+    title = "Life stage exposed") + 
+  custom_theme + 
+  theme(legend.position = "none")
+```
+
+
+#### Life stage tested for physiological traits 
+
+```{r}
+# Prepare data for stream plot (proportions by year and life stage)
+ls_tested_stream_temp <- data_temp %>%
+  select(Publication_year, Life_stage_tested) %>%
+  mutate(Life_stage_tested= strsplit(Life_stage_tested, ", ")) %>%
+  unnest(Life_stage_tested) %>%
+  group_by(Publication_year, Life_stage_tested) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(Publication_year) %>%
+  mutate(proportion = n / sum(n)) %>%
+  ungroup() %>%
+  mutate(Life_stage_tested = factor(
+    Life_stage_tested,
+    levels = c(
+      "Adults",
+      "Larvae or juveniles",
+      "Embryos",             
+      "Unclear"
+    )
+  ))
+
+# Create plot
+stream_ls_tested_temp <- ggplot(data = ls_tested_stream_temp,
+       aes(x = Publication_year,
+           y = proportion,
+           fill = Life_stage_tested)) +
+  geom_stream(type = "proportion", alpha = 0.6) +
+  geom_stream_label(type = "ridge", aes(label = Life_stage_tested), size = 7) +
+  scale_fill_manual(values = palette)+
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_continuous(
+    breaks = seq(min(ls_tested_stream$Publication_year, na.rm = TRUE),
+                 max(ls_tested_stream$Publication_year, na.rm = TRUE),
+                 by = 2),
+    expand = c(0, 0)
+  ) +
+  labs(
+    x = "Publication year",
+    y = "Proportion of studies",
+    fill = "Life stage tested",
+    title = "Life stage tested") + 
+  custom_theme + 
+  theme(legend.position = "none")
+
+```
+
+#### Combine plots
+```{r, fig.height = 10, fig.width = 20}
+# Combine plots
+stream_plot_temp <- (stream_ls_exposed_temp | stream_ls_tested_temp) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+stream_plot_temp
+```
+
+
+### **Trends across journals** 
+
+#### Life stage exposed to the stressor 
+
+```{r}
+# Calculate data summary
+life_stage_by_journal_exp_temp <- split_and_summarise(data_temp, "Journal")
+
+flextable(life_stage_by_journal_exp_temp) %>%
+  autofit() %>%
+  set_caption("Life stages exposed across journals") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+
 # Overall sample size
-overall_journal <- sum(life_stage_by_journal_exp$n)
+overall_journal_exp_temp <- sum(life_stage_by_journal_exp_temp$n)
 
 # Data summary for the plot
-plot_journal_exp <- life_stage_by_journal_exp %>%
+plot_journal_exp_temp <- life_stage_by_journal_exp_temp %>%
   group_by(Journal) %>%
   mutate(n_total = sum(n)) %>%
   ungroup() %>%
   mutate(
     Journal_label = reorder(Journal, n_total),
-    percentage = n / overall_journal * 100  # each row’s percentage of overall studies
+    percentage = n / overall_journal_exp_temp * 100  # each row’s percentage of overall studies
   )
 
 # Prepare a summary for the total counts per journal
-label_data_exp <- plot_journal_exp %>%
+label_data_exp_temp <- plot_journal_exp_temp %>%
   group_by(Journal_label) %>%
   summarise(
     total_percentage = sum(percentage),
@@ -986,40 +1550,127 @@ label_data_exp <- plot_journal_exp %>%
   )
 
 # Create the plot
-journal_plot_exp <- ggplot(plot_journal_exp, aes(x = Journal_label, y = percentage, fill = Life_stage_exposed)) +
+journal_plot_exposed_temp <- ggplot(plot_journal_exp_temp, aes(x = Journal_label, y = percentage, fill = `Life stage exposed`)) +
   geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
   # Labels for individual segments (inside the bars), only display if n > 15
   geom_text(aes(label = ifelse(n >= 15, n, "")),
             position = position_stack(vjust = 0.5),
             size = 5,
             color = "black") +
-  #geom_text(data = label_data,
-            #mapping = aes(x = Journal_label, y = total_percentage + 2, label = label),
-            #inherit.aes = FALSE,
-            #size = 4.5,
-            #color = "black",
-            #hjust = 1) +
   scale_fill_manual(values =palette, name = "Life stage exposed") +
   scale_x_discrete(name = "Journal") +
   scale_y_continuous(
     name = "Percentage of studies (%)",
     breaks = seq(0, 100, by = 10),
-    expand = c(0, 1)
-  ) +
+    expand = c(0, 1)) +
   coord_flip() +
   custom_theme 
-
-journal_plot_exp
 ```
 
 
-### Trait categories
+#### Life stage tested for physiological traits 
+
 ```{r}
+# Calculate data summary
+life_stage_by_journal_temp <- split_and_summarise2(data_temp, "Journal")
+
+flextable(life_stage_by_journal_temp) %>%
+  autofit() %>%
+  set_caption("Life stages exposed across journals") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+
 # Overall sample size
-overall_trait_exp <- sum(life_stage_by_trait_exp$n)
+overall_journal_temp <- sum(life_stage_by_journal_temp$n)
 
 # Data summary for the plot
-plot_trait_exp <- life_stage_by_trait_exp %>%
+plot_journal_temp <- life_stage_by_journal_temp %>%
+  group_by(Journal) %>%
+  mutate(n_total = sum(n)) %>%
+  ungroup() %>%
+  mutate(
+    Journal_label = reorder(Journal, n_total),
+    percentage = n / overall_journal_temp * 100
+  )
+
+# Prepare a summary for the total counts per journal
+label_data_temp <- plot_journal_temp %>%
+  group_by(Journal_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+journal_plot_tested_temp <- ggplot(plot_journal_temp, aes(x = Journal_label, y = percentage, fill = `Life stage tested`)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars), only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  scale_fill_manual(values = palette, name = "Life stage assessed") +
+  scale_x_discrete(name = "Journal") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)) +
+  coord_flip() +
+  custom_theme 
+```
+
+#### Combine plots 
+
+```{r, fig.height = 12, fig.width = 20}
+# Combine plots
+journal_plot_temp <- (journal_plot_exposed_temp | journal_plot_tested_temp) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+journal_plot_temp
+```
+
+
+### **Combine plots** 
+
+```{r, fig.height =15, fig.width = 20}
+
+figure_S2 <- (stream_plot_temp /  journal_plot_temp) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+figure_S2
+
+ggsave(figure_S2, file = "Fig/figure_S2.svg", width=20, height = 15, dpi = 1200)
+```
+
+## **Figure S3**
+
+This figure reproduces the patterns in figure 2, but only keeping studies measuring responses to temperature (i.e., the most common climatic stressor).
+
+### **Trends across trait categories**
+
+#### Life stage exposed to the stressor 
+
+```{r}
+# Calculate data summary
+life_stage_by_trait_exp_temp <- split_and_summarise(data_temp, "Trait_category")
+
+flextable(life_stage_by_trait_exp_temp) %>%
+  autofit() %>%
+  set_caption("Life stages exposed across trait categories") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+
+
+# Overall sample size
+overall_trait_exp_temp <- sum(life_stage_by_trait_exp_temp$n)
+
+# Data summary for the plot
+plot_trait_exp_temp <- life_stage_by_trait_exp_temp %>%
   filter(Trait_category != "Other") %>%  # Remove "Other" category for clarity
   # Rename the trait categories
   mutate(Trait_category = recode(Trait_category,
@@ -1034,11 +1685,11 @@ plot_trait_exp <- life_stage_by_trait_exp %>%
   ungroup() %>%
   mutate(
     trait_label = reorder(Trait_category, n_total),
-    percentage = n / overall_trait * 100
+    percentage = n / overall_trait_exp_temp * 100
   )
 
 # Prepare a summary for the total counts per trait
-label_data_exp <- plot_trait_exp %>%
+label_data_exp_temp <- plot_trait_exp_temp %>%
   group_by(trait_label) %>%
   summarise(
     total_percentage = sum(percentage),
@@ -1051,40 +1702,124 @@ label_data_exp <- plot_trait_exp %>%
   )
 
 # Create the plot
-trait_plot_exp <- ggplot(plot_trait_exp, aes(x = trait_label, y = percentage, fill = Life_stage_exposed)) +
+trait_plot_exposed_temp <- ggplot(plot_trait_exp_temp, aes(x = trait_label, y = percentage, fill = `Life stage exposed`)) +
   geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
   # Labels for individual segments (inside the bars); only display if n > 15
   geom_text(aes(label = ifelse(n >= 15, n, "")),
             position = position_stack(vjust = 0.5),
             size = 5,
             color = "black") +
- # geom_text(data = label_data,
-            #mapping = aes(x = trait_label, y = total_percentage + 2, label = label),
-            #inherit.aes = FALSE,
-            #size = 4.5,
-            #color = "black",
-            #hjust = 1) +
   scale_fill_manual(values = palette, name = "Life stage exposed") +
   scale_x_discrete(name = "Trait category") +
   scale_y_continuous(
     name = "Percentage of studies (%)",
     breaks = seq(0, 100, by = 10),
-    expand = c(0, 1)
-  ) +
+    expand = c(0, 1)) +
   coord_flip() +
   custom_theme 
-
-trait_plot_exp
 ```
 
 
-### Taxa 
+#### Life stage tested for physiological traits 
+
 ```{r}
+# Calculate data summary
+life_stage_by_trait_temp <- split_and_summarise2(data_temp, "Trait_category")
+
+flextable(life_stage_by_trait_temp) %>%
+  autofit() %>%
+  set_caption("Life stages tested across trait categories") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+
 # Overall sample size
-overall_taxa_exp <- sum(life_stage_by_taxa_exp$n)
+overall_trait_temp <- sum(life_stage_by_trait_temp$n)
 
 # Data summary for the plot
-plot_taxa_exp <- life_stage_by_taxa_exp %>%
+plot_trait_temp <- life_stage_by_trait_temp %>%
+  filter(Trait_category != "Other") %>%  # Remove "Other" category for clarity
+  mutate(Trait_category = recode(Trait_category,
+       "Environmental tolerance and preference" = "Environmental tolerance/preference",
+       "Immune function and stress physiology" = "Immune function/stress physiology",
+       "Energetics and metabolism" = "Energetics/metabolism"
+  )) %>%
+  mutate(
+    `Life stage tested` = factor(
+      `Life stage tested`,
+      levels = c("Unclear", "Embryos", "Larvae or juveniles", "Adults")
+    )
+  ) %>%
+  group_by(Trait_category) %>%
+  mutate(
+    n_total = sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    trait_label = reorder(Trait_category, n_total),
+    percentage = n / overall_trait_temp * 100  
+  )
+
+# Prepare a summary for the total counts per trait
+label_data_temp <- plot_trait_temp %>%
+  group_by(trait_label) %>%
+  summarise(
+    total_percentage = sum(percentage),
+    total_count = first(n_total)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Only display counts if 15 or greater
+    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
+  )
+
+# Create the plot
+trait_plot_tested_temp <- ggplot(plot_trait_temp, aes(x = trait_label, y = percentage, fill = `Life stage tested`)) +
+  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
+  # Labels for individual segments (inside the bars); only display if n > 15
+  geom_text(aes(label = ifelse(n >= 15, n, "")),
+            position = position_stack(vjust = 0.5),
+            size = 5,
+            color = "black") +
+  scale_fill_manual(values = palette, name = "Life stage assessed") +
+  scale_x_discrete(name = "Trait category") +
+  scale_y_continuous(
+    name = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)) +
+  coord_flip() +
+  custom_theme 
+```
+
+#### Combine plots 
+
+```{r, fig.height = 13, fig.width = 20}
+# Combine plots
+trait_plot_temp <- (trait_plot_exposed_temp | trait_plot_tested_temp) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+trait_plot_temp
+```
+
+
+### **Trends across taxonomic groups**
+
+#### Life stage exposed to the stressor 
+
+```{r}
+# Create data summary
+life_stage_by_taxa_exp_temp <- split_and_summarise(data_temp, "Taxonomic_group")
+
+flextable(life_stage_by_taxa_exp_temp) %>%
+  autofit() %>%
+  set_caption("Life stages exposed across taxonomic groups") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
+
+# Overall sample size
+overall_taxa_exp_temp <- sum(life_stage_by_taxa_exp_temp$n)
+
+# Data summary for the plot
+plot_taxa_exp_temp <- life_stage_by_taxa_exp_temp %>%
   group_by(Taxonomic_group) %>%
   mutate(
     n_total = sum(n)
@@ -1092,11 +1827,11 @@ plot_taxa_exp <- life_stage_by_taxa_exp %>%
   ungroup() %>%
   mutate(
     Taxa_label = reorder(Taxonomic_group, n_total),
-    percentage = n / overall_taxa * 100  
+    percentage = n / overall_taxa_exp_temp * 100  
   )
 
 # Prepare a summary for the total counts per taxonomic group
-label_data_exp <- plot_taxa_exp %>%
+label_data_exp_temp <- plot_taxa_exp_temp %>%
   group_by(Taxa_label) %>%
   summarise(
     total_percentage = sum(percentage),
@@ -1109,65 +1844,56 @@ label_data_exp <- plot_taxa_exp %>%
   )
 
 # Create the plot
-taxa_plot_exp <- ggplot(plot_taxa_exp, aes(x = Taxa_label, y = percentage, fill = Life_stage_exposed)) +
+taxa_plot_exposed_temp <- ggplot(plot_taxa_exp_temp, aes(x = Taxa_label, y = percentage, fill = `Life stage exposed`)) +
   geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
   # Labels for individual segments (inside the bars), only display if n > 15
   geom_text(aes(label = ifelse(n >= 15, n, "")),
             position = position_stack(vjust = 0.5),
             size = 5,
             color = "black") +
- # geom_text(data = label_data,
-            #mapping = aes(x = Taxa_label, y = total_percentage + 2, label = label),
-            #inherit.aes = FALSE,
-            #size = 4.5,
-            #color = "black",
-            #hjust = 1) +
   scale_fill_manual(values = palette, name = "Life stage exposed") +
   scale_x_discrete(name = "Taxonomic group") +
   scale_y_continuous(
     name = "Percentage of studies (%)",
     breaks = seq(0, 100, by = 10),
-    expand = c(0, 1)
-  ) +
+    expand = c(0, 1)) +
   coord_flip() +
   custom_theme 
 
-taxa_plot_exp
 ```
 
 
-### Climate change stressor
+
+#### Life stage tested for physiological traits 
+
 ```{r}
-stressor_label_exprs <- c(
-  "Other" = expression("Other"),
-  "Non-climatic stressor" = expression("Non"~"climatic"~"stressor"),
-  "Humidity/Water availability" = expression("Water"~"availability"),
-  "Salinity" = expression("Salinity"),
-  "pH" = expression("pH"),
-  "O₂/CO₂" = expression(O[2]*"/"*CO[2]),
-  "Temperature" = expression("Temperature")
-)
+# Create data summary
+life_stage_by_taxa_temp <- split_and_summarise2(data_temp, "Taxonomic_group")
+
+flextable(life_stage_by_taxa_temp) %>%
+  autofit() %>%
+  set_caption("Life stages tested across taxonomic groups") %>%  
+  bg(bg = "white", part = "all") %>%  
+  color(color = "black", part = "all")
 
 # Overall sample size
-overall_stressor_exp <- sum(life_stage_by_stressor_exp$n)
+overall_taxa_temp <- sum(life_stage_by_taxa_temp$n)
 
 # Data summary for the plot
-plot_stressor_exp <- life_stage_by_stressor_exp %>%
-  filter(Climate_change_stressor != "Other" & 
-         Climate_change_stressor != "Interaction with non-climatic stressor") %>%  # Take out some categories for clarity
-  group_by(Climate_change_stressor) %>%
+plot_taxa_temp <- life_stage_by_taxa_temp %>%
+  group_by(Taxonomic_group) %>%
   mutate(
     n_total = sum(n)
   ) %>%
   ungroup() %>%
   mutate(
-    stressor_label = reorder(Climate_change_stressor, n_total),
-    percentage = n / overall_stressor * 100 
+    Taxa_label = reorder(Taxonomic_group, n_total),
+    percentage = n / overall_taxa_temp * 100  
   )
 
-# Prepare a summary for the total counts per stressor
-label_data_exp <- plot_stressor_exp %>%
-  group_by(stressor_label) %>%
+# Prepare a summary for the total counts per taxonomic group
+label_data_temp <- plot_taxa_temp %>%
+  group_by(Taxa_label) %>%
   summarise(
     total_percentage = sum(percentage),
     total_count = first(n_total)
@@ -1179,225 +1905,104 @@ label_data_exp <- plot_stressor_exp %>%
   )
 
 # Create the plot
-stressor_plot_exp <- ggplot(plot_stressor_exp, aes(x = stressor_label, y = percentage, fill = Life_stage_exposed)) +
+taxa_plot_tested_temp <- ggplot(plot_taxa_temp, aes(x = Taxa_label, y = percentage, fill = `Life stage tested`)) +
   geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
-  # Labels for individual segments (inside the bars); only display if n > 15
+  # Labels for individual segments (inside the bars), only display if n > 15
   geom_text(aes(label = ifelse(n >= 15, n, "")),
             position = position_stack(vjust = 0.5),
             size = 5,
             color = "black") +
-  #geom_text(data = label_data,
-            #mapping = aes(x = stressor_label, y = total_percentage + 2, label = label),
-            #inherit.aes = FALSE,
-            #size = 4.5,
-            #color = "black",
-            #hjust = 0.7) +
-  scale_fill_manual(values = palette, name = "Life stage exposed") +
-  scale_x_discrete(name = "Stressor category", labels = stressor_label_exprs) +
+
+  scale_fill_manual(values = palette, name = "Life stage assessed") +
+  scale_x_discrete(name = "Taxonomic group") +
   scale_y_continuous(
     name = "Percentage of studies (%)",
     breaks = seq(0, 100, by = 10),
-    expand = c(0, 1)
-  ) +
+    expand = c(0, 1)) +
   coord_flip() +
   custom_theme 
-
-stressor_plot_exp
 ```
 
-### Combine plots
-```{r}
-combined_plot3 <- (journal_plot_exp / stressor_plot_exp) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+#### Combine plots 
 
-combined_plot3
+```{r, fig.height = 13, fig.width = 20}
+# Combine plots
+taxa_plot_temp <- (taxa_plot_exposed_temp | taxa_plot_tested_temp) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
 
-ggsave(combined_plot3, file = "Fig/prelim_fig6.png", width=15, height = 12, dpi = 750)
-
-
-combined_plot4 <- (taxa_plot_exp / trait_plot_exp) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
-
-combined_plot4
-
-ggsave(combined_plot4, file = "Fig/prelim_fig7.png", width=15, height = 12, dpi = 750)
+taxa_plot_temp
 ```
 
-## Alternative plots
-```{r}
-combined_plot5 <- (journal_plot_exp / journal_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
-ggsave(combined_plot5, file = "Fig/prelim_fig8.png", width=15, height = 15, dpi = 750)
+### **Combine plots** 
 
-combined_plot6 <- (stressor_plot_exp / stressor_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
-ggsave(combined_plot6, file = "Fig/prelim_fig9.png", width=15, height = 14, dpi = 750)
+```{r, fig.height = 15, fig.width = 20}
 
-combined_plot7 <- (taxa_plot_exp / taxa_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
-ggsave(combined_plot7, file = "Fig/prelim_fig10.png", width=15, height = 14, dpi = 750)
+figure_S3 <- (trait_plot_temp /  taxa_plot_temp) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
 
-combined_plot8 <- (trait_plot_exp / trait_plot) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
-ggsave(combined_plot8, file = "Fig/prelim_fig11.png", width=15, height = 14, dpi = 750)
+figure_S3
+
+ggsave(figure_S3, file = "Fig/figure_S3.svg", width=35, height = 20, dpi = 1200, limitsize = FALSE)
 ```
 
+## **Figure S4** 
 
-## Cord diagram to visualise studies with more than one life stage
+This figure reproduces the patterns in figure 3, but only keeping studies measuring responses to temperature (i.e., the most common climatic stressor).
+
 ```{r}
 categories <- c("Adults", "Larvae or juveniles", "Embryos")
 
-dummy_list <- data %>%
-  mutate(lifestages = strsplit(Life_stage_tested, ",\\s*")) %>%
-  mutate(lifestages = map(lifestages, ~ trimws(.x))) %>%
-  # For each record, create a numeric vector of length length(categories) (0/1)
-  mutate(dummy = map(lifestages, ~ as.integer(categories %in% .x))) %>%
-  pull(dummy)
+# Parse life stages
+data_temp <- data_temp %>% 
+  mutate(lifestages = strsplit(Life_stage_tested, ",\\s*") %>% map(trimws))
+
+# Dummy list to store matrix
+dummy_list_temp <- data_temp %>% 
+  mutate(dummy = map(lifestages, ~ as.integer(categories %in% .x))) %>% 
+  pull(dummy) %>% 
+  map(~ setNames(.x, categories))
 
 # Add names to each dummy vector
-dummy_list <- map(dummy_list, ~ setNames(.x, categories))
+dummy_list_temp <- map(dummy_list_temp, ~ setNames(.x, categories))
 
 # Sum the outer products of the dummy vectors to form a co-occurrence matrix.
 # Each record contributes an outer product: if a record has both "Adults" and "Embryos", 
 # then outer(vec, vec) returns a matrix with a 1 in that cell.
-NetMatrix_lifestage <- Reduce("+", lapply(dummy_list, function(vec) outer(vec, vec)))
+NetMatrix_lifestage_temp <- Reduce("+", lapply(dummy_list_temp, function(vec) outer(vec, vec)))
+
+# Separate cases where there is a single vs. multiple life stages
+exclusive_counts_temp <- sapply(categories, function(cat) {
+  sum(lengths(data_temp$lifestages) == 1 & vapply(data_temp$lifestages, function(x) x[1] == cat, logical(1)))
+})
+
+diag(NetMatrix_lifestage_temp) <- exclusive_counts_temp   # replace diagonal
+NetMatrix_lifestage_temp[lower.tri(NetMatrix_lifestage_temp)] <- 0  # Remove duplicated information
 
 # Check the matrix
-print(NetMatrix_lifestage)
-
-# Define a palette for the three life stages
-palette <- c(
-  "Adults" = "#1B9E77",
-  "Larvae or juveniles" = "#7570B3",
-  "Embryos" = "#E6AB02"
-)
-
-
-# Remove duplicated information
-NetMatrix_lifestage[lower.tri(NetMatrix_lifestage)] <- 0 
+print(NetMatrix_lifestage_temp)
 
 # Create the chord diagram
-#pdf(file ="Fig/chord_diagram.pdf", width = 8, height = 8, pointsize = 10)
-png(file ="Fig/chord_diagram.png", pointsize = 4.5, res = 1000, width = 10, height = 10, unit = "cm",)
+png(file ="Fig/figure_S4.png", pointsize = 4.5, res = 1000, width = 10, height = 10, unit = "cm",)
 
-chord <- chordDiagram(NetMatrix_lifestage, 
+circos.par(gap.after = c(2,2,2)) # Adjust space between categories
+figure_S4 <- chordDiagram(NetMatrix_lifestage_temp, 
                       annotationTrack = "grid", 
                       preAllocateTracks = 1, 
-                      grid.col = palette)
+                      grid.col = palette,
+                      self.link = 1) # Don't duplicate data
 
 # Remove the sector names (labels) and just display the axis (numbers/ticks)
 circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
   xlim <- get.cell.meta.data("xlim")
   ylim <- get.cell.meta.data("ylim")
   sector.name <- get.cell.meta.data("sector.index")
-  # circos.text(mean(xlim), ylim[1] + .1, sector.name, facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))
   circos.axis(h = "top", labels.cex = 0.75, major.tick.length = 0.2, 
               sector.index = sector.name, track.index = 2)
 }, bg.border = NA)
 
-chord
+figure_S4
 dev.off()
-```
 
-
-# Sensitivity analyses (supplementary figures)
-
-## Map studies only on temperature
-```{r}
-# Map across taxa, journals, trait categories 
-```
-
-
-## Map studies without the Journal of Thermal Biology
-```{r}
-stressor_summary_jtb <- data %>%
-  filter(Journal != "Journal of Thermal Biology") %>% 
-  pull(Climate_change_stressor) %>%
-  strsplit(", ") %>%
-  unlist() %>%
-  table() %>%
-  as.data.frame() %>%
-  rename(`Climate_stressor` = ".", n = "Freq") %>%
-  mutate(percentage = (n / sum(n))*100) %>%
-  arrange(percentage)
-
-flextable(stressor_summary_jtb) %>%
-  autofit() %>%
-  set_caption("Climate change stressors")
-
-
-# Life_stage_tested by stressor
-life_stage_by_stressor_jtb <- split_and_summarise(filter(data, Journal != "Journal of Thermal Biology"), "Climate_change_stressor")
-
-flextable(life_stage_by_stressor_jtb) %>%
-  autofit() %>%
-  set_caption("Life stages tested across climate change stressors")
-
-
-stressor_label_jtb <- c(
-  "Other" = expression("Other"),
-  "Non-climatic stressor" = expression("Non"~"climatic"~"stressor"),
-  "Humidity/Water availability" = expression("Water"~"availability"),
-  "Salinity" = expression("Salinity"),
-  "pH" = expression("pH"),
-  "O₂/CO₂" = expression(O[2]*"/"*CO[2]),
-  "Temperature" = expression("Temperature")
-)
-
-# Data summary for the plot
-overall_stressor_jtb <- sum(life_stage_by_stressor_jtb$n)
-
-plot_stressor_jtb <- life_stage_by_stressor_jtb %>%
-  filter(Climate_change_stressor != "Other" & 
-         Climate_change_stressor != "Interaction with non-climatic stressor") %>%  # Take out some categories for clarity
-  group_by(Climate_change_stressor) %>%
-  mutate(
-    n_total = sum(n)
-  ) %>%
-  ungroup() %>%
-  mutate(
-    stressor_label = reorder(Climate_change_stressor, n_total),
-    percentage = n / overall_stressor * 100  # each row’s percentage of overall studies
-  )
-
-# Prepare a summary for the total counts per stressor
-label_data_jtb <- plot_stressor_jtb %>%
-  group_by(stressor_label) %>%
-  summarise(
-    total_percentage = sum(percentage),
-    total_count = first(n_total)
-  ) %>%
-  ungroup() %>%
-  mutate(
-    # Only display counts if 15 or greater
-    label = ifelse(total_count >= 15, paste0("n=", total_count), NA)
-  )
-
-# Create the plot
-stressor_plot_jtb <- ggplot(plot_stressor_jtb, aes(x = stressor_label, y = percentage, fill = Life_stage_tested)) +
-  geom_col(alpha = 0.6, width = 0.8, size = 0.2, color = "black") +
-  # Labels for individual segments (inside the bars); only display if n > 15
-  geom_text(aes(label = ifelse(n >= 15, n, "")),
-            position = position_stack(vjust = 0.5),
-            size = 5,
-            color = "black") +
-  #geom_text(data = label_data,
-            #mapping = aes(x = stressor_label, y = total_percentage + 2, label = label),
-            #inherit.aes = FALSE,
-            #size = 4.5,
-            #color = "black",
-            #hjust = 0.7) +
-  scale_fill_manual(values = palette, name = "Life stage assessed") +
-  scale_x_discrete(name = "Stressor category", labels = stressor_label_jtb) +
-  scale_y_continuous(
-    name = "Percentage of studies (%)",
-    breaks = seq(0, 100, by = 10),
-    expand = c(0, 1)
-  ) +
-  coord_flip() +
-  custom_theme 
-
-stressor_plot_jtb
-```
-
-
-## Map studies without development and unclear conditions
-```{r}
-# Map across climatic stressors, taxa, journals. 
 ```
 
 
