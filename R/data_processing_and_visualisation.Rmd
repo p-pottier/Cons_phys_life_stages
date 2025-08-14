@@ -1372,6 +1372,7 @@ figure_3 <- chordDiagram(NetMatrix_lifestage,
                       annotationTrack = "grid", 
                       preAllocateTracks = 1, 
                       grid.col = palette,
+                      annotationTrackHeight = mm_h(c(5,2)),
                       self.link = 1) # Don't duplicate data
 
 # Remove the sector names (labels) and just display the axis (numbers/ticks)
@@ -1379,7 +1380,7 @@ circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
   xlim <- get.cell.meta.data("xlim")
   ylim <- get.cell.meta.data("ylim")
   sector.name <- get.cell.meta.data("sector.index")
-  circos.axis(h = "top", labels.cex = 0.75, major.tick.length = 0.2, 
+  circos.axis(h = "top", labels.cex = 0.9, major.tick.length = 0.2, 
               sector.index = sector.name, track.index = 2)
 }, bg.border = NA)
 
