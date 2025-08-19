@@ -661,6 +661,26 @@ flextable(life_stage_by_stressor) %>%
   color(color = "black", part = "all")
 ```
 
+## **Carry-over effects across life stages** 
+```{r}
+# Filter to studies where only embryos were exposed to climatic stressors
+embryo_only<- data %>%
+  filter(Life_stage_exposed == "Embryos")
+
+# Calculate summary of life stage tested
+tested_summary_embryo_only <- embryo_only %>%
+  mutate(Life_stage_tested = strsplit(Life_stage_tested, ", ")) %>%
+  unnest(Life_stage_tested) %>%
+  count(Life_stage_tested, name = "n") %>%
+  mutate(percentage = n / sum(n) * 100)
+
+flextable(tested_summary_embryo_only) %>%
+  autofit() %>%
+  set_caption("Life stages tested when only embryos were exposed") %>%
+  bg(bg = "white", part = "all") %>%
+  color(color = "black", part = "all")
+```
+
 
 # **Figures**
 
