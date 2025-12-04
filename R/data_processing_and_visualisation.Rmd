@@ -1351,7 +1351,7 @@ ggsave(figure_2, file = "Fig/figure_2.svg", width=40, height = 30, dpi = 1200, l
 Cord diagram to visualise studies with single vs multiple life stages
 
 ```{r}
-categories <- c("Adults", "Larvae or juveniles", "Embryos")
+categories <- c( "Embryos", "Larvae or juveniles", "Adults")
 
 # Parse life stages
 data <- data %>% 
@@ -2025,6 +2025,142 @@ figure_S4
 dev.off()
 
 ```
+
+## **Figure S5**
+
+### Life stage exposed to the stressor
+
+```{r}
+# Data summary
+plot_journal_exp <- life_stage_by_journal_exp %>%
+  group_by(Journal) %>%
+  mutate(
+    n_total    = sum(n),
+    percentage = 100 * n / n_total   # % within each journal
+  ) %>%
+  ungroup() %>%
+  mutate(Journal_label = reorder(Journal, n_total))
+
+
+# Plot
+journal_plot_exposed <- ggplot(
+  plot_journal_exp,
+  aes(x = Journal_label, y = percentage, fill = `Life stage exposed`)
+) +
+  geom_col(
+    alpha    = 0.6,
+    width    = 0.9,
+    size     = 0.2,
+    color    = "black",
+    position = position_dodge(width = 0.9)
+  ) +
+  geom_text(
+    aes(label = ifelse(n >= 1, n, "")),
+    position = position_dodge(width = 0.9),
+    vjust    = 0.5,
+    hjust = 1.1,
+    size     = 5,
+    color    = "black"
+  ) +
+  scale_fill_manual(values = palette, name = "Life stage exposed") +
+  scale_x_discrete(name = "Journal",
+                   expand = c(0.17, 0.17)) +
+  scale_y_continuous(
+    name   = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme +
+  guides(
+    fill = guide_legend(
+      title.position = "top",  
+      ncol           = 1,      
+      byrow          = TRUE
+    )
+  ) +
+  theme(
+    legend.position   = "bottom",
+    legend.justification = "left",   
+    legend.box.just   = "left",
+    legend.title      = element_text(hjust = 0),  
+    legend.key.width  = grid::unit(1.0, "lines"),
+    legend.key.height = grid::unit(0.6, "lines"),
+    legend.spacing.x  = grid::unit(0.1, "lines")
+  )
+```
+
+
+### Life stage tested for physiological traits
+```{r}
+# Data summary
+plot_journal <- life_stage_by_journal %>%
+  group_by(Journal) %>%
+  mutate(
+    n_total    = sum(n),
+    percentage = 100 * n / n_total   # % within each journal
+  ) %>%
+  ungroup() %>%
+  mutate(Journal_label = reorder(Journal, n_total))
+
+
+# Plot
+journal_plot_tested <- ggplot(
+  plot_journal,
+  aes(x = Journal_label, y = percentage, fill = `Life stage tested`)
+) +
+  geom_col(
+    alpha    = 0.6,
+    width    = 0.9,
+    size     = 0.2,
+    color    = "black",
+    position = position_dodge(width = 0.9)
+  ) +
+  geom_text(
+    aes(label = ifelse(n >= 15, n, "")),
+    position = position_dodge(width = 0.9),
+    vjust    = 0.5,
+    hjust = 1.1, 
+    size     = 5,
+    color    = "black"
+  ) +
+  scale_fill_manual(values = palette, name = "Life stage tested") +
+  scale_x_discrete(name = "Journal",
+                   expand = c(0.17, 0.17)) +
+  scale_y_continuous(
+    name   = "Percentage of studies (%)",
+    breaks = seq(0, 100, by = 10),
+    expand = c(0, 1)
+  ) +
+  coord_flip() +
+  custom_theme +
+  guides(
+    fill = guide_legend(
+      title.position = "top",  
+      ncol           = 1,      
+      byrow          = TRUE
+    )
+  ) +
+  theme(
+    legend.position   = "bottom",
+    legend.justification = "left",   
+    legend.box.just   = "left",
+    legend.title      = element_text(hjust = 0),  
+    legend.key.width  = grid::unit(1.0, "lines"),
+    legend.key.height = grid::unit(0.6, "lines"),
+    legend.spacing.x  = grid::unit(0.1, "lines")
+  )
+```
+
+### **Combine plots**
+```{r}
+figure_S5 <- (journal_plot_exposed + journal_plot_tested) + plot_annotation(tag_levels = "a", tag_suffix = ".") & theme(plot.tag = element_text(size = 35))
+
+figure_S5
+
+ggsave(figure_S5, file = "Fig/figure_S5.svg", width=20, height = 11, dpi = 1200, limitsize = FALSE)
+```
+
 
 
 # Package versions
