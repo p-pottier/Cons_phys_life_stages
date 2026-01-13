@@ -2,9 +2,9 @@
 
 This repository contains the data and code to reproduce the results from Pottier *et al.* (2025). Embryos are largely understudied in conservation physiology. 
 
-Note that a knitted version of the code is available (`index.html`). This rendered version is easy to navigate and produces all the outputs. 
+Note that a knitted version of the code is available at [p-pottier.github.io/Cons_phys_life_stages/](p-pottier.github.io/Cons_phys_life_stages/). This rendered version is easy to navigate and produces all the outputs. 
 
-This repository is managed by Patrice Pottier (p.pottier@unsw.edu.au). Please feel free to contact Patrice if you have any questions or find a mistake in the code. 
+This repository is managed by Patrice Pottier (patrice.pottier@bioenv.gu.se). Please feel free to contact Patrice if you have any questions or find a mistake in the code. 
 
 ---
 

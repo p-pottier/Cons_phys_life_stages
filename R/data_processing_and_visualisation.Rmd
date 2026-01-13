@@ -66,7 +66,8 @@ pacman::p_load(tidyverse,
                bibliometrix,
                bib2df,
                circlize,
-               patchwork) # p_load() will install packages if they are not installed already
+               patchwork,
+               svglite) # p_load() will install packages if they are not installed already
 set.seed(123)
 ```
 
@@ -711,7 +712,6 @@ custom_theme <- theme_minimal(base_size = 14) +
     axis.text.x = element_text(size = 15),
     axis.title.x = element_text(size = 24),
     axis.title.y = element_blank(),
-    legend.title = element_text(size = 16),
     legend.text = element_text(size = 14),
     legend.position = c(0.95, 0.05),
     legend.justification = c("right", "bottom"),
@@ -1384,8 +1384,9 @@ print(NetMatrix_lifestage)
 
 
 # Create the chord diagram
-#pdf(file ="Fig/figure_3.pdf", width = 8, height = 8, pointsize = 10)
-png(file ="Fig/figure_3.png", pointsize = 4.5, res = 1000, width = 10, height = 10, unit = "cm",)
+#pdf(file ="Fig/figure_3.pdf", width = 10, height = 10)
+#png(file ="Fig/figure_3.png", pointsize = 4.5, res = 1000, width = 10, height = 10, unit = "cm")
+svglite::svglite("Fig/figure_3.svg", width = 10/2.54, height = 10/2.54, pointsize = 4.5)
 
 circos.par(gap.after = c(2,2,2)) # Adjust space between categories
 figure_3 <- chordDiagram(NetMatrix_lifestage, 
@@ -2083,7 +2084,6 @@ journal_plot_exposed <- ggplot(
     legend.position   = "bottom",
     legend.justification = "left",   
     legend.box.just   = "left",
-    legend.title      = element_text(hjust = 0),  
     legend.key.width  = grid::unit(1.0, "lines"),
     legend.key.height = grid::unit(0.6, "lines"),
     legend.spacing.x  = grid::unit(0.1, "lines")
@@ -2145,7 +2145,6 @@ journal_plot_tested <- ggplot(
     legend.position   = "bottom",
     legend.justification = "left",   
     legend.box.just   = "left",
-    legend.title      = element_text(hjust = 0),  
     legend.key.width  = grid::unit(1.0, "lines"),
     legend.key.height = grid::unit(0.6, "lines"),
     legend.spacing.x  = grid::unit(0.1, "lines")
