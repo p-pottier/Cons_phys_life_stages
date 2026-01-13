@@ -2,7 +2,7 @@
 
 This repository contains the data and code to reproduce the results from Pottier *et al.* (2026). Embryos are largely understudied in conservation physiology. The data and code is permanently archived at Zenodo [![DOI](https://zenodo.org/badge/854446991.svg)](https://doi.org/10.5281/zenodo.18233973)
 
-Note that a knitted version of the code is available at [p-pottier.github.io/Cons_phys_life_stages/](p-pottier.github.io/Cons_phys_life_stages/). This rendered version is easy to navigate and produces all the outputs. 
+Note that a knitted version of the code is available at [p-pottier.github.io/Cons_phys_life_stages/](https://p-pottier.github.io/Cons_phys_life_stages/). This rendered version is easy to navigate and produces all the outputs. 
 
 This repository is managed by Patrice Pottier (patrice.pottier@bioenv.gu.se). Please feel free to contact Patrice if you have any questions or find a mistake in the code. 
 
