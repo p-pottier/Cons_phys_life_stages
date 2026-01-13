@@ -1,6 +1,6 @@
 # **Embryos are largely understudied in conservation physiology**
 
-This repository contains the data and code to reproduce the results from Pottier *et al.* (2025). Embryos are largely understudied in conservation physiology. 
+This repository contains the data and code to reproduce the results from Pottier *et al.* (2026). Embryos are largely understudied in conservation physiology. The data and code is permanently archived at Zenodo [![DOI](https://zenodo.org/badge/854446991.svg)](https://doi.org/10.5281/zenodo.18233973)
 
 Note that a knitted version of the code is available at [p-pottier.github.io/Cons_phys_life_stages/](p-pottier.github.io/Cons_phys_life_stages/). This rendered version is easy to navigate and produces all the outputs. 
 
